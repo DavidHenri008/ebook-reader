@@ -11,11 +11,12 @@ import type { TocItem, ReadingState } from "../types";
 
 //#region Styled Components
 const Container = styled.div`
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  grid-template-columns: 260px 1fr;
   height: 100vh;
-  width: 100vw;
   overflow: hidden;
+  width: 100vw;
 `;
 
 const Centered = styled.div`
@@ -28,34 +29,28 @@ const Centered = styled.div`
 `;
 
 const Toolbar = styled.div`
+  grid-column: 1 / -1;
+  grid-row: 1;
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 0.5rem 1rem;
   border-bottom: 1px solid var(--border);
   background-color: var(--bg);
-  flex-shrink: 0;
+  z-index: 10;
 `;
 
-const Body = styled.div`
-  display: flex;
-  flex: 1;
-  overflow-x: auto;
-  overflow-y: hidden;
-`;
+
 
 const Sidebar = styled.nav`
-  width: 260px;
-  min-width: 260px;
-  flex-shrink: 0;
+  grid-column: 1;
+  grid-row: 2;
   overflow-y: auto;
   overflow-x: hidden;
   border-right: 1px solid var(--border);
   background-color: var(--bg);
   padding: 0.75rem 0;
-  position: sticky;
-  left: 0;
-  z-index: 1;
+  box-sizing: border-box;
 `;
 
 const SidebarTitle = styled.div`
@@ -87,9 +82,10 @@ const TocButton = styled.button<{ depth: number }>`
 `;
 
 const ViewerWrapper = styled.div`
-  flex: 1;
+  grid-column: 2;
+  grid-row: 2;
   min-width: 0;
-  overflow: visible;
+  overflow: hidden;
   background-color: var(--bg);
 `;
 
@@ -97,7 +93,6 @@ const ViewerInner = styled.div<{ zoom: number }>`
   width: calc(760px * ${(p) => p.zoom} / 100);
   min-width: 100%;
   height: 100%;
-  flex-shrink: 0;
 `;
 
 const BookTitle = styled.span`
@@ -266,7 +261,6 @@ function ReaderPage() {
         </FontControls>
       </Toolbar>
 
-      <Body>
         <Sidebar>
           <SidebarTitle>Contents</SidebarTitle>
           {toc.length > 0 ? (
@@ -290,7 +284,6 @@ function ReaderPage() {
             />
           </ViewerInner>
         </ViewerWrapper>
-      </Body>
     </Container>
   );
 }

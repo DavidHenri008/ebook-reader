@@ -23,8 +23,7 @@ const ErrorOverlay = styled(Overlay)`
 
 const ReaderContainer = styled.div<{ isLoading: boolean }>`
   width: 100%;
-  height: 100%;
-  overflow: hidden;
+  height: 100vh;
   visibility: ${(props) => (props.isLoading ? "hidden" : "visible")};
 `;
 //#endregion
@@ -163,87 +162,49 @@ function EpubViewer({
           const v = view as any;
           const doc: Document | undefined = v?.document;
           const wrapper: HTMLElement | undefined = v?.element;
-          if (!doc || !wrapper) return;
+          if (!wrapper) return;
 
-          // epub.js just wrote the natural (pre-zoom) height onto the wrapper.
-          const naturalH = parseInt(wrapper.style.height, 10);
-          if (!naturalH) return;
+          // Apply zoom CSS immediately so the iframe content renders at the right size.
+          if (doc) applyZoomToDoc(doc, zoomRef.current);
 
-          // Persist natural height so the zoom effect can use it without
-          // needing to re-read scrollHeight (which varies by browser/timing).
-          wrapper.dataset.naturalH = String(naturalH);
-
-          applyZoomToDoc(doc, zoomRef.current);
-          correctViewHeight(v?.iframe, wrapper, naturalH, zoomRef.current);
-          console.log(
-            `[EpubViewer] rendered: naturalH=${naturalH} zoom=${zoomRef.current}% correctedH=${Math.ceil((naturalH * zoomRef.current) / 100)}`,
-          );
+          // With fullsize/continuous mode epub.js calls expand() AFTER the rendered
+          // event fires. We defer height reading by one tick so expand() writes
+          // the natural scrollHeight into wrapper.style.height first.
+          setTimeout(() => {
+            if (!wrapper.isConnected) return; // view was removed before timeout fired
+            const naturalH = parseInt(wrapper.style.height, 10);
+            if (!naturalH) return;
+            wrapper.dataset.naturalH = String(naturalH);
+            correctViewHeight(v?.iframe, wrapper, naturalH, zoomRef.current);
+            console.log(
+              `[EpubViewer] rendered(deferred): naturalH=${naturalH} zoom=${zoomRef.current}% correctedH=${Math.ceil((naturalH * zoomRef.current) / 100)}`,
+            );
+          }, 0);
         });
 
         // Expose goTo via callback instead of ref
         const goTo = (href: string) => {
           if (!renditionRef.current || !bookRef.current) return;
-          const [path, anchor] = href.split("#");
-          console.log(
-            `[EpubViewer] goTo href="${href}" path="${path}" anchor="${anchor ?? ""}"`,
-          );
+          console.log(`[EpubViewer] goTo href="${href}"`);
 
-          // Two-stage spine lookup: full path first, then filename match
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const spine = bookRef.current.spine as any;
-          let spineItem = spine.get(path);
-          if (!spineItem) {
-            const filename = path.split("/").pop() ?? "";
-            spineItem = spine.items?.find(
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              (item: any) =>
-                item.href &&
-                (item.href === path || item.href.endsWith("/" + filename)),
-            );
-          }
-          // Prefer numeric index – the most reliable display target for epub.js
-          const displayTarget =
-            spineItem != null ? (spineItem.index ?? spineItem.href) : path;
-          console.log(
-            "[EpubViewer] goTo spine item:",
-            spineItem,
-            "→ displayTarget:",
-            displayTarget,
-          );
-
+          // rendition.display() accepts a full href including fragment directly.
+          // epub.js resolves it against the spine and scrolls to the correct position.
           renditionRef.current
-            .display(displayTarget)
+            .display(href)
             .then(() => {
-              console.log(
-                `[EpubViewer] display resolved for "${displayTarget}"`,
-              );
-              if (!anchor || !containerRef.current) return;
-              setTimeout(() => {
-                const iframes =
-                  containerRef.current!.querySelectorAll<HTMLIFrameElement>(
-                    "iframe",
-                  );
-                console.log(
-                  `[EpubViewer] searching ${iframes.length} iframe(s) for anchor "${anchor}"`,
-                );
-                for (const iframe of iframes) {
-                  const target =
-                    iframe.contentDocument?.getElementById(anchor) ??
-                    iframe.contentDocument?.querySelector(`[name="${anchor}"]`);
-                  if (target) {
-                    console.log(
-                      `[EpubViewer] anchor found, scrolling into view`,
-                    );
-                    target.scrollIntoView({
-                      behavior: "smooth",
-                      block: "start",
-                    });
-                    break;
-                  }
-                }
-              }, 400);
+              console.log(`[EpubViewer] display resolved for "${href}"`);
             })
-            .catch(console.error);
+            .catch((err: unknown) => {
+              console.error(`[EpubViewer] display failed for "${href}"`, err);
+              // Fallback: strip fragment and try the path alone
+              const path = href.split("#")[0];
+              if (path !== href) {
+                console.log(
+                  `[EpubViewer] retrying without fragment: "${path}"`,
+                );
+                renditionRef.current?.display(path).catch(console.error);
+              }
+            });
         };
         onReadyRef.current?.(goTo);
 
