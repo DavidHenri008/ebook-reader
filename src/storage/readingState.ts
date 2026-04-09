@@ -52,4 +52,3 @@ export async function loadReadingState(bookId: string): Promise<ReadingState> {
     theme: state.theme,
   };
 }
-
