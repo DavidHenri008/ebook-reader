@@ -40,8 +40,6 @@ const Toolbar = styled.div`
   z-index: 10;
 `;
 
-
-
 const Sidebar = styled.nav`
   grid-column: 1;
   grid-row: 2;
@@ -261,29 +259,29 @@ function ReaderPage() {
         </FontControls>
       </Toolbar>
 
-        <Sidebar>
-          <SidebarTitle>Contents</SidebarTitle>
-          {toc.length > 0 ? (
-            <TocList items={toc} onNavigate={handleNavigate} />
-          ) : (
-            <EmptySidebar>No chapters found</EmptySidebar>
-          )}
-        </Sidebar>
+      <Sidebar>
+        <SidebarTitle>Contents</SidebarTitle>
+        {toc.length > 0 ? (
+          <TocList items={toc} onNavigate={handleNavigate} />
+        ) : (
+          <EmptySidebar>No chapters found</EmptySidebar>
+        )}
+      </Sidebar>
 
-        <ViewerWrapper>
-          <ViewerInner zoom={readingState.zoom}>
-            <EpubViewer
-              file={file}
-              zoom={readingState.zoom}
-              initialLocation={readingState.lastLocationCfi}
-              onLocationChange={handleLocationChange}
-              onTocLoaded={setToc}
-              onReady={(fn) => {
-                goToRef.current = fn;
-              }}
-            />
-          </ViewerInner>
-        </ViewerWrapper>
+      <ViewerWrapper>
+        <ViewerInner zoom={readingState.zoom}>
+          <EpubViewer
+            file={file}
+            zoom={readingState.zoom}
+            initialLocation={readingState.lastLocationCfi}
+            onLocationChange={handleLocationChange}
+            onTocLoaded={setToc}
+            onReady={(fn) => {
+              goToRef.current = fn;
+            }}
+          />
+        </ViewerInner>
+      </ViewerWrapper>
     </Container>
   );
 }

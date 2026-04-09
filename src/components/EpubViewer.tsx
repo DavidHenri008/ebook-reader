@@ -23,7 +23,7 @@ const ErrorOverlay = styled(Overlay)`
 
 const ReaderContainer = styled.div<{ isLoading: boolean }>`
   width: 100%;
-  height: 100vh;
+  height: 100%;
   visibility: ${(props) => (props.isLoading ? "hidden" : "visible")};
 `;
 //#endregion
@@ -187,12 +187,28 @@ function EpubViewer({
           if (!renditionRef.current || !bookRef.current) return;
           console.log(`[EpubViewer] goTo href="${href}"`);
 
-          // rendition.display() accepts a full href including fragment directly.
-          // epub.js resolves it against the spine and scrolls to the correct position.
           renditionRef.current
             .display(href)
             .then(() => {
               console.log(`[EpubViewer] display resolved for "${href}"`);
+              // epub.js's internal scrollTo can be offset in a CSS Grid layout because
+              // it uses getBoundingClientRect().top which includes the toolbar offset.
+              // scrollIntoView bypasses this by letting the browser scroll the nearest
+              // scrollable ancestor (the epub.js stage with overflow:auto).
+              try {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                const manager = (renditionRef.current as any)?.manager;
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                const section = (bookRef.current as any)?.spine?.get?.(href);
+                if (manager && section) {
+                  const view = manager.views?.find?.(section);
+                  if (view?.element instanceof HTMLElement) {
+                    view.element.scrollIntoView({ block: "start" });
+                  }
+                }
+              } catch {
+                // silently ignore if internal epub.js API changes
+              }
             })
             .catch((err: unknown) => {
               console.error(`[EpubViewer] display failed for "${href}"`, err);
