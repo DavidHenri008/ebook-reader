@@ -53,21 +53,3 @@ export async function loadReadingState(bookId: string): Promise<ReadingState> {
   };
 }
 
-/**
- * Delete reading state for a book
- * @param bookId Unique identifier for the book
- */
-export async function deleteReadingState(bookId: string): Promise<void> {
-  const db = await getDb();
-  await db.delete(STORE_NAME, bookId);
-}
-
-/**
- * Get all stored book IDs
- * @returns Array of book IDs with saved reading state
- */
-export async function getAllBookIds(): Promise<string[]> {
-  const db = await getDb();
-  const keys = await db.getAllKeys(STORE_NAME);
-  return keys as string[];
-}
