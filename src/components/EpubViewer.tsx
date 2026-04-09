@@ -126,14 +126,10 @@ function EpubViewer({
         book = ePub(arrayBuffer);
         bookRef.current = book;
         await book.ready;
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const meta = (book as any).packaging?.metadata;
-        console.log("[EpubViewer] book ready", meta?.title);
 
         // Load and expose TOC
         await book.loaded.navigation;
         const rawToc = (book.navigation as unknown as { toc: NavItem[] }).toc;
-        console.log("[EpubViewer] TOC items:", rawToc?.length ?? 0);
         onTocLoadedRef.current?.(mapTocItems(rawToc ?? []));
 
         // Clear any stale epub.js DOM left by a previous render cycle
@@ -176,21 +172,16 @@ function EpubViewer({
             if (!naturalH) return;
             wrapper.dataset.naturalH = String(naturalH);
             correctViewHeight(v?.iframe, wrapper, naturalH, zoomRef.current);
-            console.log(
-              `[EpubViewer] rendered(deferred): naturalH=${naturalH} zoom=${zoomRef.current}% correctedH=${Math.ceil((naturalH * zoomRef.current) / 100)}`,
-            );
           }, 0);
         });
 
         // Expose goTo via callback instead of ref
         const goTo = (href: string) => {
           if (!renditionRef.current || !bookRef.current) return;
-          console.log(`[EpubViewer] goTo href="${href}"`);
 
           renditionRef.current
             .display(href)
             .then(() => {
-              console.log(`[EpubViewer] display resolved for "${href}"`);
               // epub.js's internal scrollTo can be offset in a CSS Grid layout because
               // it uses getBoundingClientRect().top which includes the toolbar offset.
               // scrollIntoView bypasses this by letting the browser scroll the nearest
@@ -210,15 +201,11 @@ function EpubViewer({
                 // silently ignore if internal epub.js API changes
               }
             })
-            .catch((err: unknown) => {
-              console.error(`[EpubViewer] display failed for "${href}"`, err);
+            .catch(() => {
               // Fallback: strip fragment and try the path alone
               const path = href.split("#")[0];
               if (path !== href) {
-                console.log(
-                  `[EpubViewer] retrying without fragment: "${path}"`,
-                );
-                renditionRef.current?.display(path).catch(console.error);
+                renditionRef.current?.display(path).catch(() => {});
               }
             });
         };
@@ -234,19 +221,12 @@ function EpubViewer({
         );
 
         if (initialLocation) {
-          console.log(
-            "[EpubViewer] displaying initial location:",
-            initialLocation,
-          );
           await rendition.display(initialLocation);
         } else {
-          console.log("[EpubViewer] displaying from start");
           await rendition.display();
         }
-        console.log("[EpubViewer] initial display complete");
         setIsLoading(false);
       } catch (err) {
-        console.error("Failed to load EPUB:", err);
         setError(err instanceof Error ? err.message : "Failed to load EPUB");
         setIsLoading(false);
       }
@@ -268,7 +248,6 @@ function EpubViewer({
       if (!renditionRef.current || !containerRef.current) return;
       const w = containerRef.current.clientWidth;
       const h = containerRef.current.clientHeight;
-      console.log(`[EpubViewer] window resize → rendition.resize(${w}, ${h})`);
       renditionRef.current.resize(w, h);
     };
     window.addEventListener("resize", handleResize);
@@ -284,9 +263,6 @@ function EpubViewer({
     if (!containerRef.current) return;
     const iframes =
       containerRef.current.querySelectorAll<HTMLIFrameElement>("iframe");
-    console.log(
-      `[EpubViewer] applyZoom: zoom=${zoom}% updating ${iframes.length} iframe(s)`,
-    );
     for (const iframe of iframes) {
       const doc = iframe.contentDocument;
       const wrapper = iframe.parentElement as HTMLElement | null;
@@ -295,9 +271,6 @@ function EpubViewer({
       if (!naturalH) continue;
       applyZoomToDoc(doc, zoom);
       correctViewHeight(iframe, wrapper, naturalH, zoom);
-      console.log(
-        `[EpubViewer] applyZoom iframe: naturalH=${naturalH} correctedH=${Math.ceil((naturalH * zoom) / 100)}`,
-      );
     }
   }, [zoom]);
 
