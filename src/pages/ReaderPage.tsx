@@ -40,7 +40,7 @@ const Toolbar = styled.div`
   z-index: 10;
 `;
 
-const Sidebar = styled.nav`
+const Sidebar = styled.div`
   grid-column: 1;
   grid-row: 2;
   overflow-y: auto;
