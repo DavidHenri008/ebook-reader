@@ -49,6 +49,7 @@ const globalStyles = css`
   #root {
     height: 100%;
     width: 100%;
+    overflow: hidden;
   }
 
   button {

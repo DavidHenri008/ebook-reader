@@ -5,16 +5,25 @@ import type { EpubViewerProps, TocItem } from "../types/epub";
 
 //#region Styled Components
 const Wrapper = styled.div`
-  position: relative;
   width: 100%;
-  height: 100%;
+  display: flex;
+  position: relative;
+  background-color: var(--bg);
+  flex: 1;
+  overflow: auto;
 `;
 
 const Overlay = styled.div`
   position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
+  height: 100%;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  opacity: 100%;
+  background-color: var(--bg);
+  z-index: 1;
+  align-items: center;
+  padding-top: 20px;
 `;
 
 const ErrorOverlay = styled(Overlay)`
@@ -22,9 +31,11 @@ const ErrorOverlay = styled(Overlay)`
 `;
 
 const ReaderContainer = styled.div<{ isLoading: boolean }>`
-  width: 100%;
   height: 100%;
+  width: 100%;
+  position: relative;
   visibility: ${(props) => (props.isLoading ? "hidden" : "visible")};
+  transform-origin: top left;
 `;
 //#endregion
 
@@ -44,47 +55,14 @@ function mapTocItems(items: NavItem[]): TocItem[] {
   }));
 }
 
-/** Injects a <style> tag into an iframe document that sets CSS zoom on html. */
-function applyZoomToDoc(doc: Document, zoom: number) {
-  let st = doc.getElementById("__reader_zoom__") as HTMLStyleElement | null;
-  if (!st) {
-    st = doc.createElement("style");
-    st.id = "__reader_zoom__";
-    (doc.head ?? doc.body)?.appendChild(st);
-  }
-  st.textContent = `html { zoom: ${zoom / 100}; }`;
-}
-
-/**
- * Corrects the height of an epub.js view after expand() has run.
- *
- * Problem: epub.js calls view.expand() which reads
- * `iframe.contentDocument.documentElement.scrollHeight` cross-frame.
- * Cross-frame scrollHeight access always returns the *natural* layout height
- * regardless of any CSS `zoom` applied inside the iframe document.
- * Result: wrapper height = naturalH, but visual content height = naturalH * zoom.
- * At zoom < 1 → gap; at zoom > 1 → overlap.
- *
- * Fix: override the height epub.js set with naturalH * zoom / 100.
- */
-function correctViewHeight(
-  iframe: HTMLIFrameElement | undefined | null,
-  wrapper: HTMLElement | undefined | null,
-  naturalH: number,
-  zoom: number,
-) {
-  const correctedH = Math.ceil((naturalH * zoom) / 100);
-  if (iframe) iframe.style.height = correctedH + "px";
-  if (wrapper) wrapper.style.height = correctedH + "px";
-}
-
 function EpubViewer({
   file,
-  zoom,
   onLocationChange,
   initialLocation,
   onTocLoaded,
   onReady,
+  zoom = 100,
+  mode = "paginated",
 }: EpubViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const bookRef = useRef<Book | null>(null);
@@ -96,7 +74,6 @@ function EpubViewer({
   const onLocationChangeRef = useRef(onLocationChange);
   const onTocLoadedRef = useRef(onTocLoaded);
   const onReadyRef = useRef(onReady);
-  const zoomRef = useRef(zoom);
 
   useEffect(() => {
     onLocationChangeRef.current = onLocationChange;
@@ -116,6 +93,7 @@ function EpubViewer({
     const container = containerRef.current;
     let book: Book | null = null;
     let rendition: Rendition | null = null;
+    let active = true; // guards against StrictMode's double-invoke race
 
     const loadBook = async () => {
       try {
@@ -123,93 +101,62 @@ function EpubViewer({
         setError(null);
 
         const arrayBuffer = await file.arrayBuffer();
+        if (!active) return;
+
         book = ePub(arrayBuffer);
         bookRef.current = book;
         await book.ready;
+        if (!active) return;
 
         // Load and expose TOC
         await book.loaded.navigation;
+        if (!active) return;
         const rawToc = (book.navigation as unknown as { toc: NavItem[] }).toc;
         onTocLoadedRef.current?.(mapTocItems(rawToc ?? []));
 
-        // Clear any stale epub.js DOM left by a previous render cycle
-        // (e.g. React StrictMode mount→unmount→remount where destroy() didn't
-        // fully remove its nodes before the next renderTo call).
+        // Clear any stale epub.js DOM left by a previous render cycle.
         container.innerHTML = "";
 
+        const isPaginated = mode === "paginated";
+        // Paginated mode needs concrete pixel dimensions for spread layout.
+        // Scrolled mode works fine with percentages + continuous manager.
         rendition = book.renderTo(container, {
-          width: "100%",
-          height: "100%",
-          spread: "none",
-          flow: "scrolled",
+          width: isPaginated ? container.clientWidth : "100%",
+          height: isPaginated ? container.clientHeight : "100%",
           manager: "continuous",
+          flow: mode,
+          spread: "always",
           allowScriptedContent: true,
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
         } as any);
 
         renditionRef.current = rendition;
 
-        // `rendered` fires right after epub.js's expand() has set
-        // element.style.height = naturalScrollHeight. We read that value directly
-        // (reliable, no cross-frame scroll layout ambiguity), store it as a data
-        // attribute for future zoom changes, then correct both heights.
+        // Relay keydown events from inside iframes to the window so the
+        // document-level ArrowLeft/ArrowRight handler works when the reader
+        // has focus inside the epub content.
         rendition.on("rendered", (_section: unknown, view: unknown) => {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const v = view as any;
-          const doc: Document | undefined = v?.document;
-          const wrapper: HTMLElement | undefined = v?.element;
-          if (!wrapper) return;
-
-          // Apply zoom CSS immediately so the iframe content renders at the right size.
-          if (doc) applyZoomToDoc(doc, zoomRef.current);
-
-          // With fullsize/continuous mode epub.js calls expand() AFTER the rendered
-          // event fires. We defer height reading by one tick so expand() writes
-          // the natural scrollHeight into wrapper.style.height first.
-          setTimeout(() => {
-            if (!wrapper.isConnected) return; // view was removed before timeout fired
-            const naturalH = parseInt(wrapper.style.height, 10);
-            if (!naturalH) return;
-            wrapper.dataset.naturalH = String(naturalH);
-            correctViewHeight(v?.iframe, wrapper, naturalH, zoomRef.current);
-          }, 0);
+          const iframeWin = (view as any)?.window as
+            | (Window & typeof globalThis)
+            | undefined;
+          if (!iframeWin) return;
+          iframeWin.addEventListener("keydown", (e: KeyboardEvent) => {
+            window.dispatchEvent(
+              new KeyboardEvent("keydown", { key: e.key, bubbles: true }),
+            );
+          });
         });
 
-        // Expose goTo via callback instead of ref
         const goTo = (href: string) => {
-          if (!renditionRef.current || !bookRef.current) return;
-
-          renditionRef.current
-            .display(href)
-            .then(() => {
-              // epub.js's internal scrollTo can be offset in a CSS Grid layout because
-              // it uses getBoundingClientRect().top which includes the toolbar offset.
-              // scrollIntoView bypasses this by letting the browser scroll the nearest
-              // scrollable ancestor (the epub.js stage with overflow:auto).
-              try {
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                const manager = (renditionRef.current as any)?.manager;
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                const section = (bookRef.current as any)?.spine?.get?.(href);
-                if (manager && section) {
-                  const view = manager.views?.find?.(section);
-                  if (view?.element instanceof HTMLElement) {
-                    view.element.scrollIntoView({ block: "start" });
-                  }
-                }
-              } catch {
-                // silently ignore if internal epub.js API changes
-              }
-            })
-            .catch(() => {
-              // Fallback: strip fragment and try the path alone
-              const path = href.split("#")[0];
-              if (path !== href) {
-                renditionRef.current?.display(path).catch(() => {});
-              }
-            });
+          renditionRef.current?.display(href).catch(() => {
+            const path = href.split("#")[0];
+            if (path !== href)
+              renditionRef.current?.display(path).catch(() => {});
+          });
         };
-        onReadyRef.current?.(goTo);
+        const prev = () => renditionRef.current?.prev();
+        const next = () => renditionRef.current?.next();
 
         rendition.on(
           "locationChanged",
@@ -225,8 +172,12 @@ function EpubViewer({
         } else {
           await rendition.display();
         }
+        if (!active) return;
+
+        onReadyRef.current?.({ goTo, prev, next });
         setIsLoading(false);
       } catch (err) {
+        if (!active) return;
         setError(err instanceof Error ? err.message : "Failed to load EPUB");
         setIsLoading(false);
       }
@@ -235,44 +186,30 @@ function EpubViewer({
     loadBook();
 
     return () => {
+      active = false;
       if (rendition) rendition.destroy();
       if (book) book.destroy();
       bookRef.current = null;
       renditionRef.current = null;
     };
-  }, [file, initialLocation]);
+  }, [file, initialLocation, mode]);
 
-  // Window resize: keep rendition dimensions in sync with the container.
+  // Keyboard navigation: left/right arrows flip pages.
   useEffect(() => {
-    const handleResize = () => {
-      if (!renditionRef.current || !containerRef.current) return;
-      const w = containerRef.current.clientWidth;
-      const h = containerRef.current.clientHeight;
-      renditionRef.current.resize(w, h);
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === "ArrowRight") renditionRef.current?.next();
+      else if (e.key === "ArrowLeft") renditionRef.current?.prev();
     };
-    window.addEventListener("resize", handleResize);
-    return () => window.removeEventListener("resize", handleResize);
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
   }, []);
 
-  // Zoom: apply CSS zoom + correct view heights for all currently rendered iframes.
-  // New sections are handled by the `rendered` event registered above.
-  // naturalH is stored as data-natural-h by `rendered`, so we never need to
-  // re-read cross-frame scrollHeight (which is unreliable after zoom CSS changes).
   useEffect(() => {
-    zoomRef.current = zoom;
-    if (!containerRef.current) return;
-    const iframes =
-      containerRef.current.querySelectorAll<HTMLIFrameElement>("iframe");
-    for (const iframe of iframes) {
-      const doc = iframe.contentDocument;
-      const wrapper = iframe.parentElement as HTMLElement | null;
-      if (!doc || !wrapper) continue;
-      const naturalH = parseInt(wrapper.dataset.naturalH ?? "0", 10);
-      if (!naturalH) continue;
-      applyZoomToDoc(doc, zoom);
-      correctViewHeight(iframe, wrapper, naturalH, zoom);
+    if (containerRef.current && !isLoading) {
+      containerRef.current.style.transform = `scale(${zoom / 100})`;
+      containerRef.current.style.setProperty("width", `${(100 / zoom) * 100}%`);
     }
-  }, [zoom]);
+  }, [zoom, isLoading]);
 
   return (
     <Wrapper>

@@ -1,13 +1,15 @@
 import type { ReadingState, StoredReadingState } from "../types/storage";
 import { getDb } from "./db";
 
+
 const STORE_NAME = "reading-state";
 
 /** Default reading state for new books */
 export const defaultReadingState: ReadingState = {
   lastLocationCfi: undefined,
-  zoom: 100,
   theme: "light",
+  zoom: 100,
+  mode: "paginated",
 };
 
 /**
@@ -48,7 +50,8 @@ export async function loadReadingState(bookId: string): Promise<ReadingState> {
 
   return {
     lastLocationCfi: state.lastLocationCfi,
-    zoom: Number.isFinite(state.zoom) ? state.zoom : defaultReadingState.zoom,
     theme: state.theme,
+    zoom: state.zoom ?? defaultReadingState.zoom,
+    mode: state.mode ?? defaultReadingState.mode,
   };
 }

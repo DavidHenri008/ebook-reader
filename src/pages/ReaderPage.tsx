@@ -10,45 +10,45 @@ import {
 import type { TocItem, ReadingState } from "../types";
 
 //#region Styled Components
-const Container = styled.div`
-  display: grid;
-  grid-template-rows: auto 1fr;
-  grid-template-columns: 260px 1fr;
-  height: 100vh;
-  overflow: hidden;
-  width: 100vw;
-`;
-
-const Centered = styled.div`
+const Root = styled.div`
+  height: 100%;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  height: 100vh;
-  gap: 1rem;
+  overflow: hidden;
 `;
-
+const Container = styled.div`
+  display: flex;
+  overflow: hidden;
+  flex: 1;
+`;
+const Centered = styled.div`
+  position: absolute;
+  height: 100%;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  opacity: 100%;
+  background-color: var(--bg);
+  z-index: 1;
+  align-items: center;
+  padding-top: 40px;
+`;
 const Toolbar = styled.div`
-  grid-column: 1 / -1;
-  grid-row: 1;
+  width: 100%;
   display: flex;
   align-items: center;
-  justify-content: space-between;
   padding: 0.5rem 1rem;
   border-bottom: 1px solid var(--border);
   background-color: var(--bg);
   z-index: 10;
 `;
-
 const Sidebar = styled.div`
-  grid-column: 1;
-  grid-row: 2;
-  overflow-y: auto;
-  overflow-x: hidden;
   border-right: 1px solid var(--border);
   background-color: var(--bg);
   padding: 0.75rem 0;
   box-sizing: border-box;
+  min-width: 200px;
+  max-width: 300px;
 `;
 
 const SidebarTitle = styled.div`
@@ -79,22 +79,16 @@ const TocButton = styled.button<{ depth: number }>`
   }
 `;
 
-const ViewerWrapper = styled.div`
-  grid-column: 2;
-  grid-row: 2;
-  min-width: 0;
-  overflow: hidden;
-  background-color: var(--bg);
-`;
-
-const ViewerInner = styled.div<{ zoom: number }>`
-  width: calc(760px * ${(p) => p.zoom} / 100);
-  min-width: 100%;
-  height: 100%;
+const NavControls = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  justify-content: flex-end;
 `;
 
 const BookTitle = styled.span`
-  font-size: 0.875rem;
+  font-size: 16px;
   color: var(--text);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -102,27 +96,12 @@ const BookTitle = styled.span`
   max-width: 40%;
 `;
 
-const FontControls = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-`;
-
-const ZoomLabel = styled.span`
-  font-size: 0.75rem;
-  color: var(--text);
-  min-width: 3.5rem;
-  text-align: center;
-`;
-
 const Button = styled.button`
-  padding: 0.5rem 1rem;
-  border: 1px solid var(--border);
-  border-radius: 4px;
+  border: none;
   background-color: var(--bg);
   color: var(--text);
   cursor: pointer;
-  font-size: 0.875rem;
+  font-size: 20px;
 
   &:hover {
     background-color: var(--accent-bg);
@@ -147,6 +126,51 @@ const EmptySidebar = styled.div`
   font-size: 0.85rem;
   color: var(--text);
   opacity: 0.5;
+`;
+const Zoom = styled.span`
+  font-size: 16px;
+  color: var(--text);
+`;
+
+const ToggleLabel = styled.label`
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  color: var(--text);
+  user-select: none;
+`;
+
+const ToggleInput = styled.input`
+  appearance: none;
+  width: 36px;
+  height: 20px;
+  background-color: var(--border);
+  border-radius: 10px;
+  position: relative;
+  cursor: pointer;
+  transition: background-color 0.2s;
+
+  &::after {
+    content: "";
+    position: absolute;
+    width: 14px;
+    height: 14px;
+    background: white;
+    border-radius: 50%;
+    top: 3px;
+    left: 3px;
+    transition: transform 0.2s;
+  }
+
+  &:checked {
+    background-color: var(--accent);
+  }
+
+  &:checked::after {
+    transform: translateX(16px);
+  }
 `;
 //#endregion
 
@@ -188,12 +212,17 @@ function ReaderPage() {
   const location = useLocation();
   const navigate = useNavigate();
   const locationState = location.state as LocationState | null;
-
+  const [zoom, setZoom] = useState(100);
   const [file] = useState<File | null>(locationState?.file ?? null);
   const [bookId] = useState<string | null>(locationState?.bookId ?? null);
   const [readingState, setReadingState] = useState<ReadingState | null>(null);
+  const [toggleValue, setToggleValue] = useState(false);
   const [toc, setToc] = useState<TocItem[]>([]);
-  const goToRef = useRef<((href: string) => void) | null>(null);
+  const controlsRef = useRef<{
+    goTo: (href: string) => void;
+    prev: () => void;
+    next: () => void;
+  } | null>(null);
 
   useEffect(() => {
     if (bookId) updateLastOpened(bookId);
@@ -203,7 +232,11 @@ function ReaderPage() {
     if (!bookId) return;
     let cancelled = false;
     loadReadingState(bookId).then((state) => {
-      if (!cancelled) setReadingState(state);
+      if (!cancelled) {
+        setReadingState(state);
+        setZoom(state.zoom);
+        setToggleValue(state.mode === "paginated");
+      }
     });
     return () => {
       cancelled = true;
@@ -218,22 +251,40 @@ function ReaderPage() {
     [bookId],
   );
 
-  const changeZoom = useCallback(
-    (delta: number) => {
-      if (!bookId || !readingState) return;
-      const current = Number.isFinite(readingState.zoom)
-        ? readingState.zoom
-        : 100;
-      const newZoom = Math.max(50, Math.min(200, current + delta));
-      setReadingState((prev) => (prev ? { ...prev, zoom: newZoom } : prev));
-      saveReadingState(bookId, { zoom: newZoom });
-    },
-    [bookId, readingState],
+  const handleNavigate = useCallback((href: string) => {
+    controlsRef.current?.goTo(href);
+  }, []);
+
+  const handlePrev = useCallback(() => controlsRef.current?.prev(), []);
+  const handleNext = useCallback(() => controlsRef.current?.next(), []);
+  const zoomIn = useCallback(
+    () =>
+      setZoom((z) => {
+        const next = Math.min(z + 10, 400);
+        if (bookId) saveReadingState(bookId, { zoom: next });
+        return next;
+      }),
+    [bookId],
+  );
+  const zoomOut = useCallback(
+    () =>
+      setZoom((z) => {
+        const next = Math.max(z - 10, 20);
+        if (bookId) saveReadingState(bookId, { zoom: next });
+        return next;
+      }),
+    [bookId],
   );
 
-  const handleNavigate = useCallback((href: string) => {
-    goToRef.current?.(href);
-  }, []);
+  const handleToggleChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const value = e.target.checked;
+      setToggleValue(value);
+      if (bookId)
+        saveReadingState(bookId, { mode: value ? "paginated" : "scrolled" });
+    },
+    [bookId],
+  );
 
   if (!file) {
     return (
@@ -248,41 +299,52 @@ function ReaderPage() {
   }
 
   return (
-    <Container>
+    <Root>
       <Toolbar>
         <Button onClick={() => navigate("/")}>← Library</Button>
-        <BookTitle>{file.name}</BookTitle>
-        <FontControls>
-          <Button onClick={() => changeZoom(-10)}>−</Button>
-          <ZoomLabel>{readingState.zoom}%</ZoomLabel>
-          <Button onClick={() => changeZoom(10)}>+</Button>
-        </FontControls>
+        <NavControls>
+          <Button onClick={handlePrev}>‹</Button>
+          <BookTitle>{file.name}</BookTitle>
+          <Button onClick={handleNext}>›</Button>
+        </NavControls>
+        <NavControls>
+          <ToggleLabel>
+            Scrolled
+            <ToggleInput
+              type="checkbox"
+              checked={toggleValue}
+              onChange={handleToggleChange}
+            />
+            Paginated
+          </ToggleLabel>
+          <Button onClick={zoomOut}>-</Button>
+          <Zoom>{zoom}</Zoom>
+          <Button onClick={zoomIn}>+</Button>
+        </NavControls>
       </Toolbar>
+      <Container>
+        <Sidebar>
+          <SidebarTitle>Contents</SidebarTitle>
+          {toc.length > 0 ? (
+            <TocList items={toc} onNavigate={handleNavigate} />
+          ) : (
+            <EmptySidebar>No chapters found</EmptySidebar>
+          )}
+        </Sidebar>
 
-      <Sidebar>
-        <SidebarTitle>Contents</SidebarTitle>
-        {toc.length > 0 ? (
-          <TocList items={toc} onNavigate={handleNavigate} />
-        ) : (
-          <EmptySidebar>No chapters found</EmptySidebar>
-        )}
-      </Sidebar>
-
-      <ViewerWrapper>
-        <ViewerInner zoom={readingState.zoom}>
-          <EpubViewer
-            file={file}
-            zoom={readingState.zoom}
-            initialLocation={readingState.lastLocationCfi}
-            onLocationChange={handleLocationChange}
-            onTocLoaded={setToc}
-            onReady={(fn) => {
-              goToRef.current = fn;
-            }}
-          />
-        </ViewerInner>
-      </ViewerWrapper>
-    </Container>
+        <EpubViewer
+          file={file}
+          initialLocation={readingState.lastLocationCfi}
+          onLocationChange={handleLocationChange}
+          onTocLoaded={setToc}
+          onReady={(controls) => {
+            controlsRef.current = controls;
+          }}
+          zoom={zoom}
+          mode={toggleValue ? "paginated" : "scrolled"}
+        />
+      </Container>
+    </Root>
   );
 }
 
