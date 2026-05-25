@@ -207,42 +207,7 @@ This keeps column widths in the zoomed coordinate space, so `scrollWidth / colWi
 
 ---
 
-## Phase 4 — Page Estimator _(parallel with Phase 3B; non-blocking UI)_
-
-**Goal:** Show `Section X · ~page Y of ~Z` without blocking anything.
-
-### New file: `src/services/pageEstimator.ts`
-
-```ts
-estimateTotalPages(
-  sections: RawSection[],
-  viewportWidth: number,
-  viewportHeight: number,
-  zoom: number,
-  bookId: string,
-): Promise<{ pageCounts: number[]; total: number }>
-```
-
-- Uses `requestIdleCallback` (or `setTimeout(fn, 0)` fallback) to render each section off-screen in a hidden Shadow DOM and read `scrollWidth`.
-- Returns a `cancel()` handle so in-flight runs can be aborted on resize/zoom.
-- In-memory LRU cache keyed by `bookId|width|height|zoom` — no IDB needed.
-- Debounced 300ms restart on viewport-size or zoom change.
-
-### Wired into `src/pages/ReaderPage.tsx`
-
-- Start estimation after the first section renders.
-- Update the page-indicator string when it resolves: `Section 3 · ~page 47 of ~312`.
-- On resize/zoom change, cancel previous run and restart after debounce.
-
-### Verification
-
-1. Opening a book shows `Section 1 · page 1 of ~?` immediately; `~Z` populates within a few seconds.
-2. Resizing/zooming does not block the UI; counter updates after debounce.
-3. Rapid resizes do not pile up off-screen workers (cancel confirmed via console).
-
----
-
-## Phase 5 — Toolbar Cleanup _(depends on Phase 3B)_
+## Phase 4 — Toolbar Cleanup _(depends on Phase 3B)_
 
 ### Changes to `src/pages/ReaderPage.tsx`
 
@@ -258,7 +223,7 @@ estimateTotalPages(
 
 ---
 
-## Phase 6 — Legacy Cleanup _(parallel with Phase 5)_
+## Phase 5 — Legacy Cleanup _(parallel with Phase 5)_
 
 ### Files to delete
 
@@ -278,7 +243,7 @@ estimateTotalPages(
 
 ---
 
-## Phase 7 — Future Enhancements _(out of scope for this rewrite)_
+## Phase 6 — Future Enhancements _(out of scope for this rewrite)_
 
 These are listed for visibility. Each merits its own separate plan.
 
@@ -288,6 +253,46 @@ These are listed for visibility. Each merits its own separate plan.
 | **Search**                   | Full-text search across raw `sections[].html`; jump result = `{sectionIndex, anchor}`.                                                                                  |
 | **Highlights / annotations** | Stored as `{sectionIndex, startAnchor, endAnchor, color}` in IDB; rendered as `<mark>` injected into section HTML on load.                                              |
 | **Theme (light/dark)**       | Already modelled in `ReadingState.theme`; inject CSS vars into Shadow DOM on theme change.                                                                              |
+
+---
+
+## Phase 7 — Scrolled Mode Lazy-Loading Optimizations
+
+**Goal:** Keep scrolled mode responsive for very large books by bounding mounted DOM size and deferring expensive work until content is near the viewport.
+
+### Changes
+
+1. **Virtualize mounted sections in `src/components/SectionViewer.tsx`:**
+   - Keep only the visible section plus a small buffer, for example current ±2 sections.
+   - Unmount sections that move far outside the viewport.
+   - Preserve scroll position when removing sections above the viewport by replacing their DOM with height placeholders or adjusting `scrollTop` by the removed height.
+
+2. **Track mounted section measurements:**
+   - Store measured heights by section index after each section lays out.
+   - Reuse measured heights when temporarily replacing removed sections with placeholders.
+   - Invalidate affected measurements when zoom changes, mode changes, or section content is re-rendered.
+
+3. **Improve image loading behavior:**
+   - Add `loading="lazy"` and `decoding="async"` to images injected into scrolled sections where safe.
+   - Avoid awaiting image decode for sections that are not near the viewport.
+   - Run layout stabilization only for sections that are visible or within the preload buffer.
+
+4. **Throttle expensive anchor work:**
+   - Keep the existing debounced persistence path, but avoid full text-node walks on every scroll event.
+   - Use the topmost visible mounted section as the search root before falling back to the whole flow.
+   - Consider `requestIdleCallback` for non-critical position updates during fast scrolling.
+
+5. **Add defensive cleanup:**
+   - Disconnect observers and cancel pending animation/layout work when switching mode, changing books, or unmounting the component.
+   - Ensure placeholders, sentinels, and mounted-range refs cannot drift out of sync after rapid scrolling.
+
+### Verification
+
+1. Long book in scrolled mode keeps only the visible section buffer mounted in the DOM.
+2. Scrolling forward and backward does not jump when old sections are removed or remounted.
+3. Memory usage remains roughly bounded after scrolling through many sections.
+4. Image-heavy sections load smoothly without blocking unrelated off-screen sections.
+5. Rapid mode toggles, zoom changes, and TOC jumps do not leave stale sentinels, placeholders, or observers behind.
 
 ---
 
@@ -315,15 +320,14 @@ src/
     readingState.ts       Phase 2 — migration shim + new field
   services/
     bookExtractor.ts      Phase 1 — extractRawBook, sectionIndexForHref
-    pageEstimator.ts      Phase 4 — NEW
   components/
-    SectionViewer.tsx     Phase 3A — NEW
+    SectionViewer.tsx     Phase 3A+7 — NEW; scrolled-mode virtualization optimizations
     PageViewer.tsx        Phase 3B — DELETED
-    EpubViewer.tsx        Phase 6 — DELETED
-    EpubViewerOld.tsx     Phase 6 — DELETED
-    index.ts              Phase 3B+6 — export SectionViewer; remove deleted
+    EpubViewer.tsx        Phase 5 — DELETED
+    EpubViewerOld.tsx     Phase 5 — DELETED
+    index.ts              Phase 3B+5 — export SectionViewer; remove deleted
   pages:
-    ReaderPage.tsx        Phase 3B+5 — full rewire
-    ReaderPageOld.tsx     Phase 6 — DELETED
-    HomePage.tsx          Phase 6 — add Clear cache button
+    ReaderPage.tsx        Phase 3B+4 — full rewire
+    ReaderPageOld.tsx     Phase 5 — DELETED
+    HomePage.tsx          Phase 5 — add Clear cache button
 ```
