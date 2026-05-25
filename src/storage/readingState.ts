@@ -1,12 +1,11 @@
 import type { ReadingState, StoredReadingState } from "../types/storage";
 import { getDb } from "./db";
 
-
 const STORE_NAME = "reading-state";
 
 /** Default reading state for new books */
 export const defaultReadingState: ReadingState = {
-  lastLocationCfi: undefined,
+  lastLocation: undefined,
   theme: "light",
   zoom: 100,
   mode: "paginated",
@@ -48,8 +47,15 @@ export async function loadReadingState(bookId: string): Promise<ReadingState> {
     return { ...defaultReadingState };
   }
 
+  // Migration shim: legacy records stored a CFI string; map to safe fallback.
+  const lastLocation: ReadingState["lastLocation"] =
+    state.lastLocation ??
+    (state.lastLocationCfi !== undefined
+      ? { sectionIndex: 0, anchor: 0 }
+      : undefined);
+
   return {
-    lastLocationCfi: state.lastLocationCfi,
+    lastLocation,
     theme: state.theme,
     zoom: state.zoom ?? defaultReadingState.zoom,
     mode: state.mode ?? defaultReadingState.mode,

@@ -87,6 +87,29 @@ const RemoveButton = styled.button`
     background-color: rgba(220, 38, 38, 0.9);
   }
 `;
+
+const ClearCacheButton = styled.button`
+  position: absolute;
+  bottom: 4px;
+  right: 4px;
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: 50%;
+  background-color: rgba(0, 0, 0, 0.6);
+  color: white;
+  font-size: 14px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  &:hover {
+    background-color: rgba(30, 100, 220, 0.9);
+  }
+`;
 //#endregion
 
 interface BookCardProps {
@@ -96,16 +119,23 @@ interface BookCardProps {
   onClick: (book: BookMeta) => void;
   /** Called when remove button is clicked */
   onRemove: (book: BookMeta) => void;
+  /** Called when clear-cache button is clicked */
+  onClearCache: (book: BookMeta) => void;
 }
 
 /**
  * BookCard component displays a book in the library grid.
  * Shows cover image, title, author, and a remove button on hover.
  */
-function BookCard({ book, onClick, onRemove }: BookCardProps) {
+function BookCard({ book, onClick, onRemove, onClearCache }: BookCardProps) {
   const handleRemove = (e: React.MouseEvent) => {
     e.stopPropagation();
     onRemove(book);
+  };
+
+  const handleClearCache = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onClearCache(book);
   };
 
   return (
@@ -125,6 +155,13 @@ function BookCard({ book, onClick, onRemove }: BookCardProps) {
         >
           X
         </RemoveButton>
+        <ClearCacheButton
+          className="remove-btn"
+          onClick={handleClearCache}
+          title="Clear extraction cache"
+        >
+          ↺
+        </ClearCacheButton>
       </CoverWrapper>
       <Title title={book.title}>{book.title}</Title>
       {book.author && <Author title={book.author}>{book.author}</Author>}

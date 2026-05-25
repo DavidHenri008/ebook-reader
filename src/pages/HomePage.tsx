@@ -7,6 +7,7 @@ import {
   addBookToLibrary,
   removeBookFromLibrary,
   getBookFile,
+  deleteRawBook,
 } from "../storage";
 import type { BookMeta } from "../types";
 
@@ -127,6 +128,16 @@ function HomePage() {
     }
   }, []);
 
+  const handleClearCache = useCallback(async (book: BookMeta) => {
+    if (
+      confirm(
+        `Clear the extraction cache for "${book.title}"? It will be re-extracted on next open.`,
+      )
+    ) {
+      await deleteRawBook(book.id);
+    }
+  }, []);
+
   if (isLoading) {
     return (
       <Container>
@@ -159,6 +170,7 @@ function HomePage() {
               book={book}
               onClick={handleBookClick}
               onRemove={handleRemoveBook}
+              onClearCache={handleClearCache}
             />
           ))}
         </LibraryGrid>

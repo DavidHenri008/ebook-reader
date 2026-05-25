@@ -1,16 +1,13 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import styled from "@emotion/styled";
-import { SectionViewer } from "../components";
+import { EpubViewerOld } from "../components";
 import {
   saveReadingState,
   loadReadingState,
   updateLastOpened,
 } from "../storage";
-import { saveRawBook, loadRawBook } from "../storage/bookCache";
-import { extractRawBook, sectionIndexForHref } from "../services/bookExtractor";
-import type { TocItem, ReadingState, ReadingMode } from "../types";
-import type { RawExtractedBook } from "../types/bookPages";
+import type { TocItem, ReadingState } from "../types";
 
 //#region Styled Components
 const Root = styled.div`
@@ -175,11 +172,6 @@ const ToggleInput = styled.input`
     transform: translateX(16px);
   }
 `;
-
-const ProgressText = styled.div`
-  font-size: 14px;
-  color: var(--text);
-`;
 //#endregion
 
 interface LocationState {
@@ -220,24 +212,18 @@ function ReaderPage() {
   const location = useLocation();
   const navigate = useNavigate();
   const locationState = location.state as LocationState | null;
-
+  const [zoom, setZoom] = useState(100);
   const [file] = useState<File | null>(locationState?.file ?? null);
   const [bookId] = useState<string | null>(locationState?.bookId ?? null);
   const [readingState, setReadingState] = useState<ReadingState | null>(null);
-
-  const [extractedBook, setExtractedBook] = useState<RawExtractedBook | null>(
-    null,
-  );
+  const [toggleValue, setToggleValue] = useState(false);
   const [toc, setToc] = useState<TocItem[]>([]);
-  const [currentSection, setCurrentSection] = useState(0);
-  const [anchor, setAnchor] = useState(0);
-  const [zoom, setZoom] = useState(100);
-  const [mode, setMode] = useState<ReadingMode>("scrolled");
-  const [extractionProgress, setExtractionProgress] = useState<string | null>(
-    null,
-  );
+  const controlsRef = useRef<{
+    goTo: (href: string) => void;
+    prev: () => void;
+    next: () => void;
+  } | null>(null);
 
-  // Load reading state
   useEffect(() => {
     if (bookId) updateLastOpened(bookId);
   }, [bookId]);
@@ -249,7 +235,7 @@ function ReaderPage() {
       if (!cancelled) {
         setReadingState(state);
         setZoom(state.zoom);
-        setMode(state.mode);
+        setToggleValue(state.mode === "paginated");
       }
     });
     return () => {
@@ -257,96 +243,20 @@ function ReaderPage() {
     };
   }, [bookId]);
 
-  // Extract book when file is available
-  useEffect(() => {
-    if (!file || !bookId) return;
-    let cancelled = false;
-
-    const run = async () => {
-      // Try cache first
-      const cached = await loadRawBook(bookId);
-      if (cached) {
-        if (!cancelled) {
-          setExtractedBook(cached);
-          setToc(cached.toc);
-          setExtractionProgress(null);
-        }
-        return;
-      }
-
-      if (cancelled) return;
-
-      // Full extraction
-      setExtractionProgress("Extracting book...");
-      const fileData = await file.arrayBuffer();
-      if (cancelled) return;
-
-      const result = await extractRawBook(fileData, bookId, (done, total) => {
-        if (!cancelled) {
-          setExtractionProgress(
-            `Extracting section ${done + 1} of ${total}...`,
-          );
-        }
-      });
-
-      if (!cancelled) setExtractionProgress("Saving to cache...");
-      try {
-        await saveRawBook(result.raw);
-      } catch (e) {
-        console.warn("Failed to cache book:", e);
-      }
-
-      if (cancelled) return;
-
-      setExtractedBook(result.raw);
-      setToc(result.toc);
-      setExtractionProgress(null);
-    };
-
-    run();
-    return () => {
-      cancelled = true;
-    };
-  }, [file, bookId]);
-
-  // Persist position changes reported by SectionViewer
-  const handlePositionChange = useCallback(
-    (pos: { sectionIndex: number; anchor: number }) => {
-      setCurrentSection(pos.sectionIndex);
-      if (bookId) saveReadingState(bookId, { lastLocation: pos });
+  const handleLocationChange = useCallback(
+    (_cfi: string) => {
+      if (!bookId) return;
+      // CFI-based location is no longer stored (legacy viewer — see Phase 3).
     },
     [bookId],
   );
 
-  // Track section navigation (section-boundary crossing, scrolled sentinels)
-  const handleSectionNavigate = useCallback((sectionIndex: number) => {
-    setCurrentSection(sectionIndex);
+  const handleNavigate = useCallback((href: string) => {
+    controlsRef.current?.goTo(href);
   }, []);
 
-  // Restore position on load
-  useEffect(() => {
-    if (!readingState || !extractedBook) return;
-    const saved = readingState.lastLocation;
-    if (saved) {
-      const section = Math.min(
-        saved.sectionIndex,
-        extractedBook.sections.length - 1,
-      );
-      setCurrentSection(Math.max(0, section));
-      setAnchor(saved.anchor);
-    }
-  }, [readingState, extractedBook]);
-
-  const handleNavigate = useCallback(
-    (href: string) => {
-      if (!extractedBook) return;
-      const section = sectionIndexForHref(extractedBook.sections, href);
-      setCurrentSection(section);
-      setAnchor(0);
-    },
-    [extractedBook],
-  );
-
+  const handlePrev = useCallback(() => controlsRef.current?.prev(), []);
+  const handleNext = useCallback(() => controlsRef.current?.next(), []);
   const zoomIn = useCallback(
     () =>
       setZoom((z) => {
@@ -366,11 +276,12 @@ function ReaderPage() {
     [bookId],
   );
 
-  const handleModeChange = useCallback(
+  const handleToggleChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
-      const newMode: ReadingMode = e.target.checked ? "paginated" : "scrolled";
-      setMode(newMode);
-      if (bookId) saveReadingState(bookId, { mode: newMode });
+      const value = e.target.checked;
+      setToggleValue(value);
+      if (bookId)
+        saveReadingState(bookId, { mode: value ? "paginated" : "scrolled" });
     },
     [bookId],
   );
@@ -387,26 +298,22 @@ function ReaderPage() {
     return <Centered>Loading...</Centered>;
   }
 
-  if (extractionProgress || !extractedBook) {
-    return (
-      <Centered>
-        <ProgressText>{extractionProgress ?? "Loading..."}</ProgressText>
-      </Centered>
-    );
-  }
-
   return (
     <Root>
       <Toolbar>
         <Button onClick={() => navigate("/")}>← Library</Button>
-        <BookTitle>{file.name}</BookTitle>
+        <NavControls>
+          <Button onClick={handlePrev}>‹</Button>
+          <BookTitle>{file.name}</BookTitle>
+          <Button onClick={handleNext}>›</Button>
+        </NavControls>
         <NavControls>
           <ToggleLabel>
             Scrolled
             <ToggleInput
               type="checkbox"
-              checked={mode === "paginated"}
-              onChange={handleModeChange}
+              checked={toggleValue}
+              onChange={handleToggleChange}
             />
             Paginated
           </ToggleLabel>
@@ -425,15 +332,16 @@ function ReaderPage() {
           )}
         </Sidebar>
 
-        <SectionViewer
-          sections={extractedBook.sections}
-          bookId={bookId ?? ""}
-          currentSection={currentSection}
-          anchor={anchor}
+        <EpubViewerOld
+          file={file}
+          initialLocation={undefined}
+          onLocationChange={handleLocationChange}
+          onTocLoaded={setToc}
+          onReady={(controls) => {
+            controlsRef.current = controls;
+          }}
           zoom={zoom}
-          mode={mode}
-          onPositionChange={handlePositionChange}
-          onNavigate={handleSectionNavigate}
+          mode={toggleValue ? "paginated" : "scrolled"}
         />
       </Container>
     </Root>

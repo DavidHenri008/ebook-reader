@@ -3,3 +3,4 @@
 
 export * from "./library";
 export * from "./readingState";
+export * from "./bookCache";

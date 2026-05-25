@@ -5,8 +5,8 @@ export type Theme = "light" | "dark";
 export type ReadingMode = "paginated" | "scrolled";
 
 export interface ReadingState {
-  /** CFI location in the book */
-  lastLocationCfi?: string;
+  /** Position within the book: section index + character-offset anchor */
+  lastLocation?: { sectionIndex: number; anchor: number };
   /** Color theme */
   theme: Theme;
   /** Zoom level (percentage, e.g. 100 = 100%) */
