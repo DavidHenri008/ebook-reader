@@ -243,13 +243,9 @@ function ReaderPage() {
     };
   }, [bookId]);
 
-  const handleLocationChange = useCallback(
-    (_cfi: string) => {
-      if (!bookId) return;
-      // CFI-based location is no longer stored (legacy viewer — see Phase 3).
-    },
-    [bookId],
-  );
+  const handleLocationChange = useCallback(() => {
+    // CFI-based location is no longer stored (legacy viewer — see Phase 3).
+  }, []);
 
   const handleNavigate = useCallback((href: string) => {
     controlsRef.current?.goTo(href);

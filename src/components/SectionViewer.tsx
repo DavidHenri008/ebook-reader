@@ -58,6 +58,12 @@ const NavButton = styled.button`
   &:hover {
     background: rgba(0, 0, 0, 0.65);
   }
+
+  &:disabled {
+    cursor: default;
+    opacity: 0.35;
+    background: rgba(0, 0, 0, 0.25);
+  }
 `;
 
 // ---------------------------------------------------------------------------
@@ -1020,6 +1026,7 @@ function SectionViewer({
       {mode === "paginated" && (
         <NavButton
           aria-label="Previous page"
+          disabled={isFirstSection && atFirstPage}
           onClick={navigatePrev}
           style={{ left: 16 }}
         >
@@ -1029,6 +1036,7 @@ function SectionViewer({
       {mode === "paginated" && (
         <NavButton
           aria-label="Next page"
+          disabled={isLastSection && atLastPage}
           onClick={navigateNext}
           style={{ right: 16 }}
         >

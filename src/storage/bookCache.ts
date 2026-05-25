@@ -119,11 +119,11 @@ export async function loadRawBook(
   const stored = await db.getAllFromIndex(SECTIONS_STORE, "byBook", bookId);
   const sections: RawSection[] = stored
     .sort((a, b) => a.index - b.index)
-    .map(({ bookId: _bookId, ...s }) => ({
-      index: s.index,
-      href: s.href,
-      html: s.html,
-      viewport: s.viewport,
+    .map((section) => ({
+      index: section.index,
+      href: section.href,
+      html: section.html,
+      viewport: section.viewport,
     }));
 
   return {
