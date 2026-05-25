@@ -21,10 +21,16 @@ export interface SectionViewerProps {
 // Styled components
 // ---------------------------------------------------------------------------
 
-const Wrapper = styled.div<{ $mode: "paginated" | "scrolled" }>`
+const OuterContainer = styled.div`
   flex: 1;
-  overflow: auto;
   position: relative;
+  overflow: hidden;
+`;
+
+const Wrapper = styled.div<{ $mode: "paginated" | "scrolled" }>`
+  width: 100%;
+  height: 100%;
+  overflow: auto;
   background: var(--bg, #fff);
   display: ${(p) => (p.$mode === "paginated" ? "grid" : "block")};
   align-items: ${(p) => (p.$mode === "paginated" ? "safe center" : "stretch")};
@@ -44,10 +50,11 @@ const NavButton = styled.button`
   width: 40px;
   height: 40px;
   cursor: pointer;
-  font-size: 20px;
+  font-size: 38px;
   display: flex;
   align-items: center;
   justify-content: center;
+  padding-bottom: 12px;
   &:hover {
     background: rgba(0, 0, 0, 0.65);
   }
@@ -1003,30 +1010,32 @@ function SectionViewer({
   const atLastPage = pageInSection === pageCount - 1;
 
   return (
-    <Wrapper ref={wrapperRef} $mode={mode} tabIndex={0}>
-      {/* Shadow DOM host — sized by the active renderer. */}
-      <div ref={hostRef} />
+    <OuterContainer>
+      <Wrapper ref={wrapperRef} $mode={mode} tabIndex={0}>
+        {/* Shadow DOM host — sized by the active renderer. */}
+        <div ref={hostRef} />
+      </Wrapper>
 
-      {/* Paginated navigation buttons */}
-      {mode === "paginated" && !(atFirstPage && isFirstSection) && (
+      {/* Paginated navigation buttons — positioned against OuterContainer, not the scroll area */}
+      {mode === "paginated" && (
         <NavButton
           aria-label="Previous page"
           onClick={navigatePrev}
-          style={{ left: 8 }}
+          style={{ left: 16 }}
         >
           &#8249;
         </NavButton>
       )}
-      {mode === "paginated" && !(atLastPage && isLastSection) && (
+      {mode === "paginated" && (
         <NavButton
           aria-label="Next page"
           onClick={navigateNext}
-          style={{ right: 8 }}
+          style={{ right: 16 }}
         >
           &#8250;
         </NavButton>
       )}
-    </Wrapper>
+    </OuterContainer>
   );
 }
 
