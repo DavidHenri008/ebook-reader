@@ -1,6 +1,7 @@
 import { useRef, useEffect, useCallback, useState } from "react";
 import styled from "@emotion/styled";
 import type { RawSection } from "../types/bookPages";
+import type { Theme } from "../types/storage";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -13,6 +14,7 @@ export interface SectionViewerProps {
   anchor: number;
   zoom: number; // 20–400, maps to CSS zoom = zoom/100
   mode: "paginated" | "scrolled";
+  theme: Theme;
   onPositionChange: (pos: { sectionIndex: number; anchor: number }) => void;
   onNavigate?: (sectionIndex: number) => void;
 }
@@ -70,9 +72,16 @@ const NavButton = styled.button`
 // Shadow DOM style builder
 // ---------------------------------------------------------------------------
 
-function buildHostStyle(zoom: number): string {
+const THEME_CSS: Record<Theme, string> =
+  {
+    light:
+      "--bg:#ffffff;--text:#6b6375;--text-heading:#08060d;--border:#e5e4e7;color-scheme:light;",
+    dark: "--bg:#16171d;--text:#9ca3af;--text-heading:#f3f4f6;--border:#2e303a;color-scheme:dark;",
+  };
+
+function buildHostStyle(zoom: number, theme: Theme): string {
   return `
-    :host{display:block;width:100%;}
+    :host{display:block;width:100%;${THEME_CSS[theme]}}
     .clamp,.flow{zoom:${zoom / 100};}
     .flow{display:block;position:relative;overflow:visible;}
     .cols,.flow-section{position:relative;z-index:0;isolation:isolate;}
@@ -301,6 +310,7 @@ function SectionViewer({
   anchor,
   zoom,
   mode,
+  theme,
   onPositionChange,
   onNavigate,
 }: SectionViewerProps) {
@@ -326,6 +336,7 @@ function SectionViewer({
   const anchorRef = useRef(anchor);
   const modeRef = useRef(mode);
   const zoomRef = useRef(zoom);
+  const themeRef = useRef(theme);
   const pageRef = useRef(0);
   const pageCountRef = useRef(1);
   const paginatedRenderIdRef = useRef(0);
@@ -436,7 +447,7 @@ function SectionViewer({
       shadowRef.current = shadow;
 
       const style = document.createElement("style");
-      style.textContent = buildHostStyle(zoomRef.current);
+      style.textContent = buildHostStyle(zoomRef.current, themeRef.current);
       hostStyleRef.current = style;
       shadow.appendChild(style);
 
@@ -863,6 +874,7 @@ function SectionViewer({
     anchorRef.current = anchor;
     modeRef.current = mode;
     zoomRef.current = zoom;
+    themeRef.current = theme;
 
     if (mode === "paginated") {
       renderPaginated(currentSection, zoom, 0).then(() => {
@@ -909,7 +921,7 @@ function SectionViewer({
 
     // Update content zoom in the shadow style sheet
     if (hostStyleRef.current) {
-      hostStyleRef.current.textContent = buildHostStyle(zoom);
+      hostStyleRef.current.textContent = buildHostStyle(zoom, themeRef.current);
     }
 
     if (modeRef.current === "paginated") {
@@ -928,6 +940,17 @@ function SectionViewer({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [zoom]);
+
+  // ── React to theme change ─────────────────────────────────────────────────
+
+  useEffect(() => {
+    if (themeRef.current === theme) return;
+    themeRef.current = theme;
+
+    if (hostStyleRef.current) {
+      hostStyleRef.current.textContent = buildHostStyle(zoomRef.current, theme);
+    }
+  }, [theme]);
 
   // ── React to mode change ──────────────────────────────────────────────────
 

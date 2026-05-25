@@ -245,14 +245,7 @@ This keeps column widths in the zoomed coordinate space, so `scrollWidth / colWi
 
 ## Phase 6 — Future Enhancements _(out of scope for this rewrite)_
 
-These are listed for visibility. Each merits its own separate plan.
-
-| Feature                      | Notes                                                                                                                                                                   |
-| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Typography overrides**     | Font-family/size/line-height injected via `<style>` in the Shadow DOM. Zoom change path already triggers reflow — font changes reuse the same anchor-restore mechanism. |
-| **Search**                   | Full-text search across raw `sections[].html`; jump result = `{sectionIndex, anchor}`.                                                                                  |
-| **Highlights / annotations** | Stored as `{sectionIndex, startAnchor, endAnchor, color}` in IDB; rendered as `<mark>` injected into section HTML on load.                                              |
-| **Theme (light/dark)**       | Already modelled in `ReadingState.theme`; inject CSS vars into Shadow DOM on theme change.                                                                              |
+- **Theme (light/dark)**       | Already modelled in `ReadingState.theme`; inject CSS vars into Shadow DOM on theme change.
 
 ---
 

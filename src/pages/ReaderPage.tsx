@@ -9,7 +9,7 @@ import {
 } from "../storage";
 import { saveRawBook, loadRawBook } from "../storage/bookCache";
 import { extractRawBook, sectionIndexForHref } from "../services/bookExtractor";
-import type { TocItem, ReadingState, ReadingMode } from "../types";
+import type { TocItem, ReadingState, ReadingMode, Theme } from "../types";
 import type { RawExtractedBook } from "../types/bookPages";
 
 //#region Styled Components
@@ -241,6 +241,7 @@ function ReaderPage() {
   const [anchor, setAnchor] = useState(0);
   const [zoom, setZoom] = useState(100);
   const [mode, setMode] = useState<ReadingMode>("scrolled");
+  const [theme, setTheme] = useState<Theme>("light");
   const [extractionProgress, setExtractionProgress] = useState<string | null>(
     null,
   );
@@ -295,6 +296,7 @@ function ReaderPage() {
         setReadingState(state);
         setZoom(state.zoom);
         setMode(state.mode);
+        if (state.theme) setTheme(state.theme);
         if (state.lastLocation) {
           setCurrentSection(Math.max(0, state.lastLocation.sectionIndex));
           setAnchor(Math.max(0, state.lastLocation.anchor));
@@ -305,6 +307,11 @@ function ReaderPage() {
       cancelled = true;
     };
   }, [bookId]);
+
+  // Apply explicit theme to document root so global CSS vars override the media query
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+  }, [theme]);
 
   // Extract book when file is available
   useEffect(() => {
@@ -411,6 +418,14 @@ function ReaderPage() {
     [bookId],
   );
 
+  const toggleTheme = useCallback(() => {
+    setTheme((t) => {
+      const next: Theme = t === "light" ? "dark" : "light";
+      if (bookId) saveReadingState(bookId, { theme: next });
+      return next;
+    });
+  }, [bookId]);
+
   if (!file) {
     return (
       <Centered>
@@ -448,6 +463,13 @@ function ReaderPage() {
           <Button onClick={zoomOut}>-</Button>
           <Zoom>{zoom}%</Zoom>
           <Button onClick={zoomIn}>+</Button>
+          <Button
+            aria-label="Toggle theme"
+            title={theme === "light" ? "Switch to dark mode" : "Switch to light mode"}
+            onClick={toggleTheme}
+          >
+            {theme === "light" ? "☾" : "☀"}
+          </Button>
         </NavControls>
       </Toolbar>
       <Container>
@@ -477,6 +499,7 @@ function ReaderPage() {
           anchor={anchor}
           zoom={zoom}
           mode={mode}
+          theme={theme}
           onPositionChange={handlePositionChange}
           onNavigate={handleSectionNavigate}
         />
