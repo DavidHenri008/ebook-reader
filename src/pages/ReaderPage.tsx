@@ -247,8 +247,9 @@ function ReaderPage() {
 
   const sectionTextLengths = useMemo(
     () =>
-      extractedBook?.sections.map((section) => getPlainTextLength(section.html))
-      ?? [],
+      extractedBook?.sections.map((section) =>
+        getPlainTextLength(section.html),
+      ) ?? [],
     [extractedBook],
   );
 

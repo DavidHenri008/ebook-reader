@@ -72,6 +72,13 @@ function getDb(): Promise<RawBooksDB> {
           store.createIndex("byBook", "bookId");
         }
       },
+    }).then((db) => {
+      db.addEventListener("versionchange", () => {
+        db.close();
+        dbPromise = null;
+      });
+
+      return db;
     });
   }
   return dbPromise;

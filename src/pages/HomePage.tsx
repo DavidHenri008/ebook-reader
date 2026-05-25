@@ -11,6 +11,34 @@ import {
 } from "../storage";
 import type { BookMeta } from "../types";
 
+const CACHE_DB_NAME = "epub-reader-pages";
+
+function deleteCacheDatabase(): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.deleteDatabase(CACHE_DB_NAME);
+    let isSettled = false;
+
+    const resolveOnce = () => {
+      if (!isSettled) {
+        isSettled = true;
+        resolve();
+      }
+    };
+
+    request.onsuccess = resolveOnce;
+    request.onblocked = () => {
+      reject(
+        new Error(
+          "Close other tabs using this app, then try clearing cached books again.",
+        ),
+      );
+    };
+    request.onerror = () => {
+      reject(request.error ?? new Error("Failed to clear cached books."));
+    };
+  });
+}
+
 //#region Styled Components
 const Container = styled.div`
   min-height: 100vh;
@@ -30,6 +58,45 @@ const Title = styled.h1`
   font-size: 2rem;
   font-weight: 300;
   color: var(--text-heading);
+`;
+
+const HeaderActions = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+`;
+
+const ClearCachedBooksButton = styled.button`
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background-color: var(--bg);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 1rem;
+  font-weight: 500;
+  transition:
+    border-color 0.2s,
+    color 0.2s,
+    opacity 0.2s;
+
+  &:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
+  &:hover:not(:disabled) {
+    border-color: var(--accent-border);
+    color: var(--accent);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
 `;
 
 const LibraryGrid = styled.div`
@@ -73,6 +140,7 @@ function HomePage() {
   const [books, setBooks] = useState<BookMeta[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isAdding, setIsAdding] = useState(false);
+  const [isClearingCache, setIsClearingCache] = useState(false);
 
   const sortByTitle = useCallback(
     (list: BookMeta[]) =>
@@ -138,6 +206,27 @@ function HomePage() {
     }
   }, []);
 
+  const handleClearCachedBooks = useCallback(async () => {
+    if (
+      !confirm(
+        "Clear all cached extracted books? Books stay in your library, but they will be re-extracted on next open.",
+      )
+    ) {
+      return;
+    }
+
+    setIsClearingCache(true);
+    try {
+      await deleteCacheDatabase();
+      window.location.reload();
+    } catch (error) {
+      setIsClearingCache(false);
+      alert(
+        error instanceof Error ? error.message : "Failed to clear cached books.",
+      );
+    }
+  }, []);
+
   if (isLoading) {
     return (
       <Container>
@@ -150,11 +239,20 @@ function HomePage() {
     <Container>
       <Header>
         <Title>My Library</Title>
-        <FilePicker
-          onFileSelect={handleFileSelect}
-          label="+ Add Book"
-          disabled={isAdding}
-        />
+        <HeaderActions>
+          <ClearCachedBooksButton
+            type="button"
+            onClick={handleClearCachedBooks}
+            disabled={isClearingCache}
+          >
+            {isClearingCache ? "Clearing..." : "Clear cached books"}
+          </ClearCachedBooksButton>
+          <FilePicker
+            onFileSelect={handleFileSelect}
+            label="+ Add Book"
+            disabled={isAdding}
+          />
+        </HeaderActions>
       </Header>
 
       {books.length === 0 ? (
