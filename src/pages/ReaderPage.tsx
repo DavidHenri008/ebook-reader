@@ -9,6 +9,7 @@ import {
 } from "../storage";
 import { saveRawBook, loadRawBook } from "../storage/bookCache";
 import { extractRawBook, sectionIndexForHref } from "../services/bookExtractor";
+import { getPlainTextLength, estimateCharsPerPage } from "../services/pageEstimation";
 import type { TocItem, ReadingState, ReadingMode, Theme } from "../types";
 import type { RawExtractedBook } from "../types/bookPages";
 
@@ -178,18 +179,6 @@ const PositionLabel = styled.div`
 `;
 //#endregion
 
-const BASE_CHARS_PER_PAGE = 1800;
-
-function getPlainTextLength(html: string): number {
-  const parsed = new DOMParser().parseFromString(html, "text/html");
-  return parsed.body.textContent?.replace(/\s+/g, " ").trim().length ?? 0;
-}
-
-function estimateCharsPerPage(zoom: number): number {
-  const zoomFactor = zoom / 100;
-  return Math.max(300, Math.round(BASE_CHARS_PER_PAGE / zoomFactor ** 2));
-}
-
 interface LocationState {
   file?: File;
   bookId?: string;
@@ -229,9 +218,8 @@ function ReaderPage() {
   const navigate = useNavigate();
   const locationState = location.state as LocationState | null;
 
-  // Captured once for the page's lifetime; navigation away unmounts this component.
-  const [file] = useState<File | null>(() => locationState?.file ?? null);
-  const [bookId] = useState<string | null>(() => locationState?.bookId ?? null);
+  const file = locationState?.file ?? null;
+  const bookId = locationState?.bookId ?? null;
   const [readingState, setReadingState] = useState<ReadingState | null>(null);
 
   const [extractedBook, setExtractedBook] = useState<RawExtractedBook | null>(
@@ -490,8 +478,7 @@ function ReaderPage() {
           </TocContent>
           <PositionText>
             <PositionLabel>Position</PositionLabel>
-            Section {estimatedPosition.sectionNumber} &middot; ~page{" "}
-            {estimatedPosition.page} of ~{estimatedPosition.total}
+            Page {estimatedPosition.page} of {estimatedPosition.total}
           </PositionText>
         </Sidebar>
 

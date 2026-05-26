@@ -67,12 +67,14 @@ export async function extractRawBook(
   bookId: string,
   onProgress?: (done: number, total: number) => void,
 ): Promise<RawExtractedBook> {
-  /* eslint-disable @typescript-eslint/no-explicit-any */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const book = ePub(fileData, { replacements: "base64" } as any);
   await book.ready;
 
   // Wait for resource replacement so section HTML has inlined assets
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   await (book as any).loaded.resources;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const resources = (book as any).resources;
   if (resources?.replacements) {
     await resources.replacements();
@@ -80,15 +82,19 @@ export async function extractRawBook(
   }
 
   // Extract TOC
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   await (book as any).loaded.navigation;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const rawToc = ((book as any).navigation as { toc: NavItem[] })?.toc ?? [];
   const toc = mapTocItems(rawToc);
 
   // Iterate spine sections
   const spineItems: SpineItem[] = [];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   (book.spine as any).each((item: SpineItem) => spineItems.push(item));
 
   const sections: RawSection[] = [];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const loadFn = (book as any).load.bind(book);
 
   for (let i = 0; i < spineItems.length; i++) {
@@ -114,7 +120,6 @@ export async function extractRawBook(
   }
 
   book.destroy();
-  /* eslint-enable @typescript-eslint/no-explicit-any */
 
   return {
     bookId,
