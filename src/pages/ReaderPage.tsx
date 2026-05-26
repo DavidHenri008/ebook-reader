@@ -44,6 +44,7 @@ const Toolbar = styled.div`
   border-bottom: 1px solid var(--border);
   background-color: var(--bg);
   z-index: 10;
+  justify-content: space-between;
 `;
 const Sidebar = styled.div`
   border-right: 1px solid var(--border);
@@ -89,7 +90,6 @@ const NavControls = styled.div`
   display: flex;
   align-items: center;
   gap: 8px;
-  flex: 1;
   justify-content: flex-end;
 `;
 
@@ -242,7 +242,9 @@ function ReaderPage() {
   const [anchor, setAnchor] = useState(0);
   const [zoom, setZoom] = useState(100);
   const [mode, setMode] = useState<ReadingMode>("scrolled");
-  const [theme, setTheme] = useState<Theme>("light");
+  const [theme, setTheme] = useState<Theme>(
+    () => (localStorage.getItem("app-theme") as Theme | null) ?? "light",
+  );
   const [extractionProgress, setExtractionProgress] = useState<string | null>(
     null,
   );
@@ -423,6 +425,7 @@ function ReaderPage() {
     setTheme((t) => {
       const next: Theme = t === "light" ? "dark" : "light";
       if (bookId) saveReadingState(bookId, { theme: next });
+      localStorage.setItem("app-theme", next);
       return next;
     });
   }, [bookId]);

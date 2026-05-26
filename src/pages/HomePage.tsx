@@ -10,6 +10,9 @@ import {
   deleteRawBook,
 } from "../storage";
 import type { BookMeta } from "../types";
+import type { Theme } from "../types";
+
+const THEME_STORAGE_KEY = "app-theme";
 
 const CACHE_DB_NAME = "epub-reader-pages";
 
@@ -67,6 +70,7 @@ const HeaderActions = styled.div`
 `;
 
 const ClearCachedBooksButton = styled.button`
+  height: 2.5rem;
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
@@ -133,6 +137,33 @@ const LoadingText = styled.div`
   padding: 4rem;
   color: var(--text);
 `;
+
+const ThemeButton = styled.button`
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background-color: var(--bg);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 1.2rem;
+  transition:
+    border-color 0.2s,
+    color 0.2s;
+
+  &:hover {
+    border-color: var(--accent-border);
+    color: var(--accent);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+`;
 //#endregion
 
 function HomePage() {
@@ -141,12 +172,24 @@ function HomePage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isAdding, setIsAdding] = useState(false);
   const [isClearingCache, setIsClearingCache] = useState(false);
+  const [theme, setTheme] = useState<Theme>(
+    () => (localStorage.getItem(THEME_STORAGE_KEY) as Theme | null) ?? "light",
+  );
 
   const sortByTitle = useCallback(
     (list: BookMeta[]) =>
       [...list].sort((a, b) => a.title.localeCompare(b.title)),
     [],
   );
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    localStorage.setItem(THEME_STORAGE_KEY, theme);
+  }, [theme]);
+
+  const toggleTheme = useCallback(() => {
+    setTheme((t) => (t === "light" ? "dark" : "light"));
+  }, []);
 
   const loadLibrary = useCallback(async () => {
     setIsLoading(true);
@@ -250,6 +293,15 @@ function HomePage() {
           >
             {isClearingCache ? "Clearing..." : "Clear cached books"}
           </ClearCachedBooksButton>
+          <ThemeButton
+            aria-label="Toggle theme"
+            title={
+              theme === "light" ? "Switch to dark mode" : "Switch to light mode"
+            }
+            onClick={toggleTheme}
+          >
+            {theme === "light" ? "☾" : "☀"}
+          </ThemeButton>
           <FilePicker
             onFileSelect={handleFileSelect}
             label="+ Add Book"

@@ -12,6 +12,7 @@ const HiddenInput = styled.input`
 `;
 
 const PickerButton = styled.button`
+  height: 2.5rem;
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
