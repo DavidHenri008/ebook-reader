@@ -47,15 +47,8 @@ export async function loadReadingState(bookId: string): Promise<ReadingState> {
     return { ...defaultReadingState };
   }
 
-  // Migration shim: legacy records stored a CFI string; map to safe fallback.
-  const lastLocation: ReadingState["lastLocation"] =
-    state.lastLocation ??
-    (state.lastLocationCfi !== undefined
-      ? { sectionIndex: 0, anchor: 0 }
-      : undefined);
-
   return {
-    lastLocation,
+    lastLocation: state.lastLocation,
     theme: state.theme,
     zoom: state.zoom ?? defaultReadingState.zoom,
     mode: state.mode ?? defaultReadingState.mode,

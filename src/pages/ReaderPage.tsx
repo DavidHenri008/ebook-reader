@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useEffect, useCallback, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import styled from "@emotion/styled";
 import { SectionViewer } from "../components";
@@ -229,8 +229,9 @@ function ReaderPage() {
   const navigate = useNavigate();
   const locationState = location.state as LocationState | null;
 
-  const [file] = useState<File | null>(locationState?.file ?? null);
-  const [bookId] = useState<string | null>(locationState?.bookId ?? null);
+  // Captured once for the page's lifetime; navigation away unmounts this component.
+  const [file] = useState<File | null>(() => locationState?.file ?? null);
+  const [bookId] = useState<string | null>(() => locationState?.bookId ?? null);
   const [readingState, setReadingState] = useState<ReadingState | null>(null);
 
   const [extractedBook, setExtractedBook] = useState<RawExtractedBook | null>(
@@ -347,14 +348,14 @@ function ReaderPage() {
 
       if (!cancelled) setExtractionProgress("Saving to cache...");
       try {
-        await saveRawBook(result.raw);
+        await saveRawBook(result);
       } catch (e) {
         console.warn("Failed to cache book:", e);
       }
 
       if (cancelled) return;
 
-      setExtractedBook(result.raw);
+      setExtractedBook(result);
       setToc(result.toc);
       setExtractionProgress(null);
     };

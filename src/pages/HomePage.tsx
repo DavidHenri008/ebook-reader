@@ -218,14 +218,17 @@ function HomePage() {
     setIsClearingCache(true);
     try {
       await deleteCacheDatabase();
-      window.location.reload();
+      await loadLibrary();
     } catch (error) {
-      setIsClearingCache(false);
       alert(
-        error instanceof Error ? error.message : "Failed to clear cached books.",
+        error instanceof Error
+          ? error.message
+          : "Failed to clear cached books.",
       );
+    } finally {
+      setIsClearingCache(false);
     }
-  }, []);
+  }, [loadLibrary]);
 
   if (isLoading) {
     return (

@@ -56,11 +56,6 @@ function extractViewport(
 
 // ---------- public API ----------
 
-export interface RawExtractionResult {
-  raw: RawExtractedBook;
-  toc: TocItem[];
-}
-
 /**
  * Extract an EPUB file into self-contained section HTML strings.
  * No page measurement is performed — the cache is size-independent.
@@ -71,7 +66,7 @@ export async function extractRawBook(
   fileData: ArrayBuffer,
   bookId: string,
   onProgress?: (done: number, total: number) => void,
-): Promise<RawExtractionResult> {
+): Promise<RawExtractedBook> {
   /* eslint-disable @typescript-eslint/no-explicit-any */
   const book = ePub(fileData, { replacements: "base64" } as any);
   await book.ready;
@@ -121,14 +116,12 @@ export async function extractRawBook(
   book.destroy();
   /* eslint-enable @typescript-eslint/no-explicit-any */
 
-  const raw: RawExtractedBook = {
+  return {
     bookId,
     sections,
     toc,
     extractedAt: Date.now(),
   };
-
-  return { raw, toc };
 }
 
 /**

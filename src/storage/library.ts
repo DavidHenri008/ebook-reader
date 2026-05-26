@@ -104,7 +104,7 @@ export async function addBookToLibrary(file: File): Promise<BookMeta> {
  * @param id - Book ID (hash)
  * @returns Promise resolving to StoredBook or undefined
  */
-export async function getBook(id: string): Promise<StoredBook | undefined> {
+async function getBook(id: string): Promise<StoredBook | undefined> {
   const db = await getDb();
   return db.get(STORE_NAME, id);
 }
@@ -168,7 +168,7 @@ export async function getAllBooks(): Promise<BookMeta[]> {
  * @returns BookMeta without fileData
  */
 function bookToMeta(book: StoredBook): BookMeta {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const { fileData, ...meta } = book;
+  const { fileData: _fileData, ...meta } = book;
+  void _fileData;
   return meta;
 }

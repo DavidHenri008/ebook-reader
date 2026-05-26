@@ -139,7 +139,7 @@ function BookCard({ book, onClick, onRemove, onClearCache }: BookCardProps) {
   };
 
   return (
-    <Card onDoubleClick={() => onClick(book)}>
+    <Card onClick={() => onClick(book)}>
       <CoverWrapper>
         {book.coverUrl ? (
           <Cover src={book.coverUrl} alt={book.title} />
