@@ -359,7 +359,9 @@ function SectionViewer({
 
   // Timer / observer refs
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const saveIdleCallbackRef = useRef<number | null>(null);
   const intersectObserverRef = useRef<IntersectionObserver | null>(null);
+  const resizeObserverRef = useRef<ResizeObserver | null>(null);
 
   // Stable ref to onNavigate so sentinel callbacks never go stale
   const onNavigateRef = useRef(onNavigate);
@@ -511,13 +513,25 @@ function SectionViewer({
       onNavigateRef.current?.(sectionIndex);
     }
 
-    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = setTimeout(() => {
-      onPositionChangeRef.current({
-        sectionIndex,
-        anchor: newAnchor,
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+    }
+    if (saveIdleCallbackRef.current !== null) {
+      cancelIdleCallback(saveIdleCallbackRef.current);
+      saveIdleCallbackRef.current = null;
+    }
+
+    const persist = () => {
+      onPositionChangeRef.current({ sectionIndex, anchor: newAnchor });
+    };
+    if (typeof requestIdleCallback !== "undefined") {
+      saveIdleCallbackRef.current = requestIdleCallback(persist, {
+        timeout: 1000,
       });
-    }, 300);
+    } else {
+      saveTimerRef.current = setTimeout(persist, 300);
+    }
   }, []);
 
   // Stable ref so IntersectionObserver callbacks always call the latest version
@@ -653,6 +667,28 @@ function SectionViewer({
 
   // ── Scrolled render ──────────────────────────────────────────────────────
 
+  // ── Scrolled teardown ────────────────────────────────────────────────────
+
+  const teardownScrolled = useCallback(() => {
+    intersectObserverRef.current?.disconnect();
+    intersectObserverRef.current = null;
+    topSentinelRef.current = null;
+    bottomSentinelRef.current = null;
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+    }
+    if (saveIdleCallbackRef.current !== null) {
+      cancelIdleCallback(saveIdleCallbackRef.current);
+      saveIdleCallbackRef.current = null;
+    }
+    flowRef.current?.replaceChildren();
+    mountedRangeRef.current = {
+      first: sectionRef.current,
+      last: sectionRef.current,
+    };
+  }, []);
+
   const mountPreviousScrolledSection = useCallback((): boolean => {
     const range = mountedRangeRef.current;
     if (range.first <= 0) return false;
@@ -719,13 +755,9 @@ function SectionViewer({
       const renderId = scrolledRenderIdRef.current + 1;
       scrolledRenderIdRef.current = renderId;
 
-      const { clamp, flow } = ensureShadow();
+      teardownScrolled();
 
-      // Disconnect any previous observer
-      intersectObserverRef.current?.disconnect();
-      intersectObserverRef.current = null;
-      topSentinelRef.current = null;
-      bottomSentinelRef.current = null;
+      const { clamp, flow } = ensureShadow();
 
       clamp.style.display = "none";
       const host = hostRef.current!;
@@ -735,7 +767,6 @@ function SectionViewer({
       host.style.position = "relative";
       flow.style.cssText =
         "display:block;width:100%;position:relative;overflow:visible;";
-      flow.replaceChildren();
 
       mountedRangeRef.current = { first: sIdx, last: sIdx };
 
@@ -757,6 +788,7 @@ function SectionViewer({
 
       const observer = new IntersectionObserver(
         (entries) => {
+          if (renderId !== scrolledRenderIdRef.current) return;
           let mounted = false;
           entries.forEach((entry) => {
             if (!entry.isIntersecting) return;
@@ -793,6 +825,7 @@ function SectionViewer({
       });
     },
     [
+      teardownScrolled,
       ensureShadow,
       sections,
       applyCount,
@@ -885,8 +918,8 @@ function SectionViewer({
     }
 
     return () => {
-      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-      intersectObserverRef.current?.disconnect();
+      teardownScrolled();
+      resizeObserverRef.current?.disconnect();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -904,6 +937,7 @@ function SectionViewer({
         );
       });
     } else {
+      teardownScrolled();
       renderScrolled(currentSection);
       requestAnimationFrame(() =>
         restoreAnchor(anchor, modeRef.current, zoomRef.current),
@@ -958,6 +992,7 @@ function SectionViewer({
     modeRef.current = mode;
 
     if (mode === "paginated") {
+      teardownScrolled();
       renderPaginated(sectionRef.current, zoomRef.current, 0).then(() => {
         requestAnimationFrame(() =>
           restoreAnchor(anchorRef.current, mode, zoomRef.current),
@@ -1010,9 +1045,11 @@ function SectionViewer({
       }, 100);
     });
 
+    resizeObserverRef.current = ro;
     ro.observe(wrapper);
     return () => {
       ro.disconnect();
+      resizeObserverRef.current = null;
       if (debounce) clearTimeout(debounce);
     };
   }, [renderPaginated, restoreAnchor]);
