@@ -9,7 +9,10 @@ import {
 } from "../storage";
 import { saveRawBook, loadRawBook } from "../storage/bookCache";
 import { extractRawBook, sectionIndexForHref } from "../services/bookExtractor";
-import { getPlainTextLength, estimateCharsPerPage } from "../services/pageEstimation";
+import {
+  getPlainTextLength,
+  estimateCharsPerPage,
+} from "../services/pageEstimation";
 import type { TocItem, ReadingState, ReadingMode, Theme } from "../types";
 import type { RawExtractedBook } from "../types/bookPages";
 
