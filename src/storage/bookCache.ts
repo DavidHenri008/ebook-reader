@@ -1,87 +1,25 @@
-import { openDB, type IDBPDatabase } from "idb";
+import { getDb } from "./db";
 import type { RawExtractedBook, RawSection } from "../types/bookPages";
 
-const DB_NAME = "epub-reader-pages";
-const DB_VERSION = 4;
-const META_STORE = "extracted-books-raw";
-const SECTIONS_STORE = "extracted-sections";
+const META_STORE = "extracted-books-raw" as const;
+const SECTIONS_STORE = "extracted-sections" as const;
 
-// ---- stored shapes ----
+// ---- compression helpers ----
 
-import type { TocItem } from "../types/epub";
-
-interface StoredMeta {
-  bookId: string;
-  sectionCount: number;
-  toc: TocItem[];
-  extractedAt: number;
+async function compressString(str: string): Promise<ArrayBuffer> {
+  const cs = new CompressionStream("deflate-raw");
+  const writer = cs.writable.getWriter();
+  void writer.write(new TextEncoder().encode(str));
+  void writer.close();
+  return new Response(cs.readable).arrayBuffer();
 }
 
-interface StoredSection {
-  bookId: string;
-  index: number;
-  href: string;
-  html: string;
-  viewport?: { width: number; height: number };
-}
-
-interface RawBooksSchema {
-  [META_STORE]: {
-    key: string;
-    value: StoredMeta;
-  };
-  [SECTIONS_STORE]: {
-    key: [string, number];
-    value: StoredSection;
-    indexes: { byBook: string };
-  };
-}
-
-type RawBooksDB = IDBPDatabase<RawBooksSchema>;
-
-let dbPromise: Promise<RawBooksDB> | null = null;
-
-function getDb(): Promise<RawBooksDB> {
-  if (!dbPromise) {
-    dbPromise = openDB<RawBooksSchema>(DB_NAME, DB_VERSION, {
-      upgrade(db, oldVersion) {
-        // v1 -> v2: remove the very first legacy store
-        if (oldVersion < 2) {
-          if (db.objectStoreNames.contains("extracted-books")) {
-            db.deleteObjectStore("extracted-books");
-          }
-        }
-        // v2 -> v3: old schema stored all sections in a single record -- too
-        // large for many books. Drop and recreate with per-section layout.
-        // v3 -> v4: sections now store per-section viewport metadata.
-        if (oldVersion < 4) {
-          if (db.objectStoreNames.contains(META_STORE)) {
-            db.deleteObjectStore(META_STORE);
-          }
-          if (db.objectStoreNames.contains(SECTIONS_STORE)) {
-            db.deleteObjectStore(SECTIONS_STORE);
-          }
-        }
-        if (!db.objectStoreNames.contains(META_STORE)) {
-          db.createObjectStore(META_STORE, { keyPath: "bookId" });
-        }
-        if (!db.objectStoreNames.contains(SECTIONS_STORE)) {
-          const store = db.createObjectStore(SECTIONS_STORE, {
-            keyPath: ["bookId", "index"],
-          });
-          store.createIndex("byBook", "bookId");
-        }
-      },
-    }).then((db) => {
-      db.addEventListener("versionchange", () => {
-        db.close();
-        dbPromise = null;
-      });
-
-      return db;
-    });
-  }
-  return dbPromise;
+async function decompressString(buffer: ArrayBuffer): Promise<string> {
+  const ds = new DecompressionStream("deflate-raw");
+  const writer = ds.writable.getWriter();
+  void writer.write(new Uint8Array(buffer));
+  void writer.close();
+  return new Response(ds.readable).text();
 }
 
 /**
@@ -90,6 +28,12 @@ function getDb(): Promise<RawBooksDB> {
  * step never needs to hold the entire book in memory at once.
  */
 export async function saveRawBook(book: RawExtractedBook): Promise<void> {
+  // Compress all HTML in parallel before opening the IDB transaction.
+  // Awaiting inside a transaction would cause it to auto-commit prematurely.
+  const compressedHtml = await Promise.all(
+    book.sections.map((s) => compressString(s.html)),
+  );
+
   const db = await getDb();
   const tx = db.transaction([META_STORE, SECTIONS_STORE], "readwrite");
 
@@ -100,12 +44,14 @@ export async function saveRawBook(book: RawExtractedBook): Promise<void> {
     extractedAt: book.extractedAt,
   });
 
-  for (const section of book.sections) {
+  for (let i = 0; i < book.sections.length; i++) {
+    const section = book.sections[i];
     tx.objectStore(SECTIONS_STORE).put({
       bookId: book.bookId,
       index: section.index,
       href: section.href,
-      html: section.html,
+      html: compressedHtml[i],
+      textLength: section.textLength,
       viewport: section.viewport,
     });
   }
@@ -124,14 +70,17 @@ export async function loadRawBook(
   if (!meta) return null;
 
   const stored = await db.getAllFromIndex(SECTIONS_STORE, "byBook", bookId);
-  const sections: RawSection[] = stored
-    .sort((a, b) => a.index - b.index)
-    .map((section) => ({
-      index: section.index,
-      href: section.href,
-      html: section.html,
-      viewport: section.viewport,
-    }));
+  const sorted = stored.sort((a, b) => a.index - b.index);
+  const htmlStrings = await Promise.all(
+    sorted.map((s) => decompressString(s.html)),
+  );
+  const sections: RawSection[] = sorted.map((section, i) => ({
+    index: section.index,
+    href: section.href,
+    html: htmlStrings[i],
+    textLength: section.textLength,
+    viewport: section.viewport,
+  }));
 
   return {
     bookId,
@@ -158,5 +107,16 @@ export async function deleteRawBook(bookId: string): Promise<void> {
   for (const key of sectionKeys) {
     tx.objectStore(SECTIONS_STORE).delete(key);
   }
+  await tx.done;
+}
+
+/**
+ * Clear all cached extractions for every book.
+ */
+export async function clearAllRawBooks(): Promise<void> {
+  const db = await getDb();
+  const tx = db.transaction([META_STORE, SECTIONS_STORE], "readwrite");
+  tx.objectStore(META_STORE).clear();
+  tx.objectStore(SECTIONS_STORE).clear();
   await tx.done;
 }

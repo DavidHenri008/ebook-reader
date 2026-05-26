@@ -8,39 +8,12 @@ import {
   removeBookFromLibrary,
   getBookFile,
   deleteRawBook,
+  clearAllRawBooks,
 } from "../storage";
 import type { BookMeta } from "../types";
 import type { Theme } from "../types";
 
 const THEME_STORAGE_KEY = "app-theme";
-
-const CACHE_DB_NAME = "epub-reader-pages";
-
-function deleteCacheDatabase(): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const request = indexedDB.deleteDatabase(CACHE_DB_NAME);
-    let isSettled = false;
-
-    const resolveOnce = () => {
-      if (!isSettled) {
-        isSettled = true;
-        resolve();
-      }
-    };
-
-    request.onsuccess = resolveOnce;
-    request.onblocked = () => {
-      reject(
-        new Error(
-          "Close other tabs using this app, then try clearing cached books again.",
-        ),
-      );
-    };
-    request.onerror = () => {
-      reject(request.error ?? new Error("Failed to clear cached books."));
-    };
-  });
-}
 
 //#region Styled Components
 const Container = styled.div`
@@ -260,7 +233,7 @@ function HomePage() {
 
     setIsClearingCache(true);
     try {
-      await deleteCacheDatabase();
+      await clearAllRawBooks();
       await loadLibrary();
     } catch (error) {
       alert(

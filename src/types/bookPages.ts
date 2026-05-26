@@ -10,6 +10,8 @@ export interface RawSection {
   href: string;
   /** Self-contained HTML string with inlined assets */
   html: string;
+  /** Precomputed plain-text character count, used for page estimation */
+  textLength: number;
   /** Viewport dimensions declared by the section's meta viewport tag, if present */
   viewport?: { width: number; height: number };
 }

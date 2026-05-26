@@ -1,9 +1,30 @@
 import { openDB, type IDBPDatabase } from "idb";
 import type { StoredBook } from "../types/library";
 import type { StoredReadingState } from "../types/storage";
+import type { TocItem } from "../types/epub";
 
 const DB_NAME = "epub-reader";
-const DB_VERSION = 3;
+const DB_VERSION = 1;
+
+// ---- section cache shapes ----
+
+interface StoredMeta {
+  bookId: string;
+  sectionCount: number;
+  toc: TocItem[];
+  extractedAt: number;
+}
+
+interface StoredSection {
+  bookId: string;
+  index: number;
+  href: string;
+  html: ArrayBuffer;
+  textLength: number;
+  viewport?: { width: number; height: number };
+}
+
+// ---- schema ----
 
 export interface EpubReaderSchema {
   library: {
@@ -15,34 +36,41 @@ export interface EpubReaderSchema {
     key: string;
     value: StoredReadingState;
   };
+  "extracted-books-raw": {
+    key: string;
+    value: StoredMeta;
+  };
+  "extracted-sections": {
+    key: [string, number];
+    value: StoredSection;
+    indexes: { byBook: string };
+  };
 }
 
 export type EpubReaderDB = IDBPDatabase<EpubReaderSchema>;
 
 let dbPromise: Promise<EpubReaderDB> | null = null;
 
-/**
- * Get or create the shared IndexedDB database connection.
- * Uses a singleton pattern to reuse the same connection across calls.
- * @returns Promise resolving to the database instance
- */
 export function getDb(): Promise<EpubReaderDB> {
   if (!dbPromise) {
     dbPromise = openDB<EpubReaderSchema>(DB_NAME, DB_VERSION, {
-      upgrade(db, oldVersion) {
-        if (oldVersion < 1) {
-          db.createObjectStore("reading-state", { keyPath: "bookId" });
-        }
-        if (oldVersion < 2) {
-          const store = db.createObjectStore("library", { keyPath: "id" });
-          store.createIndex("addedAt", "addedAt");
-          store.createIndex("lastOpenedAt", "lastOpenedAt");
-        }
-        // v3: recover DBs that reached v2 without the reading-state store
-        if (oldVersion < 3 && !db.objectStoreNames.contains("reading-state")) {
-          db.createObjectStore("reading-state", { keyPath: "bookId" });
-        }
+      upgrade(db) {
+        db.createObjectStore("reading-state", { keyPath: "bookId" });
+        const library = db.createObjectStore("library", { keyPath: "id" });
+        library.createIndex("addedAt", "addedAt");
+        library.createIndex("lastOpenedAt", "lastOpenedAt");
+        db.createObjectStore("extracted-books-raw", { keyPath: "bookId" });
+        const sections = db.createObjectStore("extracted-sections", {
+          keyPath: ["bookId", "index"],
+        });
+        sections.createIndex("byBook", "bookId");
       },
+    }).then((db) => {
+      db.addEventListener("versionchange", () => {
+        db.close();
+        dbPromise = null;
+      });
+      return db;
     });
   }
   return dbPromise;

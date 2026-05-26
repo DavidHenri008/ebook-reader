@@ -1,4 +1,4 @@
-import type { ReadingState, StoredReadingState } from "../types/storage";
+import type { ReadingState, StoredReadingState, Theme } from "../types/storage";
 import { getDb } from "./db";
 
 const STORE_NAME = "reading-state";
@@ -44,7 +44,11 @@ export async function loadReadingState(bookId: string): Promise<ReadingState> {
   const state = await db.get(STORE_NAME, bookId);
 
   if (!state) {
-    return { ...defaultReadingState };
+    const storedTheme = localStorage.getItem("app-theme") as Theme | null;
+    return {
+      ...defaultReadingState,
+      theme: storedTheme ?? defaultReadingState.theme,
+    };
   }
 
   return {

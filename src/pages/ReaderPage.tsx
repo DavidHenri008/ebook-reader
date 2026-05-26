@@ -9,10 +9,7 @@ import {
 } from "../storage";
 import { saveRawBook, loadRawBook } from "../storage/bookCache";
 import { extractRawBook, sectionIndexForHref } from "../services/bookExtractor";
-import {
-  getPlainTextLength,
-  estimateCharsPerPage,
-} from "../services/pageEstimation";
+import { estimateCharsPerPage } from "../services/pageEstimation";
 import type { TocItem, ReadingState, ReadingMode, Theme } from "../types";
 import type { RawExtractedBook } from "../types/bookPages";
 
@@ -27,18 +24,6 @@ const Container = styled.div`
   display: flex;
   overflow: hidden;
   flex: 1;
-`;
-const Centered = styled.div`
-  position: absolute;
-  height: 100%;
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  opacity: 100%;
-  background-color: var(--bg);
-  z-index: 1;
-  align-items: center;
-  padding-top: 40px;
 `;
 const Toolbar = styled.div`
   width: 100%;
@@ -118,19 +103,6 @@ const Button = styled.button`
   }
 `;
 
-const LinkButton = styled.button`
-  background: none;
-  border: none;
-  color: var(--text);
-  cursor: pointer;
-  font-size: 0.875rem;
-  text-decoration: underline;
-
-  &:hover {
-    color: var(--accent);
-  }
-`;
-
 const EmptySidebar = styled.div`
   padding: 0 1rem;
   font-size: 0.85rem;
@@ -161,6 +133,14 @@ const ModeSelect = styled.select`
 const ProgressText = styled.div`
   font-size: 14px;
   color: var(--text);
+`;
+
+const ProgressBody = styled.div`
+  flex: 1;
+  display: flex;
+  align-items: top;
+  justify-content: center;
+  margin-top: 4rem;
 `;
 
 const PositionText = styled.div`
@@ -241,10 +221,7 @@ function ReaderPage() {
   );
 
   const sectionTextLengths = useMemo(
-    () =>
-      extractedBook?.sections.map((section) =>
-        getPlainTextLength(section.html),
-      ) ?? [],
+    () => extractedBook?.sections.map((s) => s.textLength) ?? [],
     [extractedBook],
   );
 
@@ -311,6 +288,7 @@ function ReaderPage() {
   useEffect(() => {
     if (!file || !bookId) return;
     let cancelled = false;
+    const controller = new AbortController();
 
     const run = async () => {
       // Try cache first
@@ -331,31 +309,42 @@ function ReaderPage() {
       const fileData = await file.arrayBuffer();
       if (cancelled) return;
 
-      const result = await extractRawBook(fileData, bookId, (done, total) => {
-        if (!cancelled) {
-          setExtractionProgress(
-            `Extracting section ${done + 1} of ${total}...`,
-          );
-        }
-      });
-
-      if (!cancelled) setExtractionProgress("Saving to cache...");
       try {
-        await saveRawBook(result);
+        const result = await extractRawBook(
+          fileData,
+          bookId,
+          (done, total) => {
+            if (!cancelled) {
+              setExtractionProgress(
+                `Extracting section ${done + 1} of ${total}...`,
+              );
+            }
+          },
+          controller.signal,
+        );
+
+        if (!cancelled) setExtractionProgress("Saving to cache...");
+        try {
+          await saveRawBook(result);
+        } catch (e) {
+          console.warn("Failed to cache book:", e);
+        }
+
+        if (cancelled) return;
+
+        setExtractedBook(result);
+        setToc(result.toc);
+        setExtractionProgress(null);
       } catch (e) {
-        console.warn("Failed to cache book:", e);
+        if (controller.signal.aborted) return;
+        throw e;
       }
-
-      if (cancelled) return;
-
-      setExtractedBook(result);
-      setToc(result.toc);
-      setExtractionProgress(null);
     };
 
     run();
     return () => {
       cancelled = true;
+      controller.abort();
     };
   }, [file, bookId]);
 
@@ -423,21 +412,76 @@ function ReaderPage() {
 
   if (!file) {
     return (
-      <Centered>
-        <LinkButton onClick={() => navigate("/")}>← Back to Library</LinkButton>
-      </Centered>
+      <Root>
+        <Toolbar>
+          <Button onClick={() => navigate("/")}>← Library</Button>
+          <BookTitle />
+          <NavControls>
+            <Button
+              aria-label="Toggle theme"
+              title={
+                theme === "light"
+                  ? "Switch to dark mode"
+                  : "Switch to light mode"
+              }
+              onClick={toggleTheme}
+            >
+              {theme === "light" ? "☾" : "☀"}
+            </Button>
+          </NavControls>
+        </Toolbar>
+      </Root>
     );
   }
 
   if (!readingState) {
-    return <Centered>Loading...</Centered>;
+    return (
+      <Root>
+        <Toolbar>
+          <Button onClick={() => navigate("/")}>← Library</Button>
+          <BookTitle>{file.name}</BookTitle>
+          <NavControls>
+            <Button
+              aria-label="Toggle theme"
+              title={
+                theme === "light"
+                  ? "Switch to dark mode"
+                  : "Switch to light mode"
+              }
+              onClick={toggleTheme}
+            >
+              {theme === "light" ? "☾" : "☀"}
+            </Button>
+          </NavControls>
+        </Toolbar>
+      </Root>
+    );
   }
 
   if (extractionProgress || !extractedBook) {
     return (
-      <Centered>
-        <ProgressText>{extractionProgress ?? "Loading..."}</ProgressText>
-      </Centered>
+      <Root>
+        <Toolbar>
+          <Button onClick={() => navigate("/")}>← Library</Button>
+          <BookTitle>{file.name}</BookTitle>
+          <NavControls>
+            <Button
+              aria-label="Toggle theme"
+              title={
+                theme === "light"
+                  ? "Switch to dark mode"
+                  : "Switch to light mode"
+              }
+              onClick={toggleTheme}
+            >
+              {theme === "light" ? "☾" : "☀"}
+            </Button>
+          </NavControls>
+        </Toolbar>
+        <ProgressBody>
+          <ProgressText>{extractionProgress ?? "Loading..."}</ProgressText>
+        </ProgressBody>
+      </Root>
     );
   }
 
