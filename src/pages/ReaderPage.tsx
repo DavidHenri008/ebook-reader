@@ -465,7 +465,9 @@ function ReaderPage() {
           <Button onClick={zoomIn}>+</Button>
           <Button
             aria-label="Toggle theme"
-            title={theme === "light" ? "Switch to dark mode" : "Switch to light mode"}
+            title={
+              theme === "light" ? "Switch to dark mode" : "Switch to light mode"
+            }
             onClick={toggleTheme}
           >
             {theme === "light" ? "☾" : "☀"}

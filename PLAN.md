@@ -245,47 +245,123 @@ This keeps column widths in the zoomed coordinate space, so `scrollWidth / colWi
 
 ## Phase 6 — Future Enhancements _(out of scope for this rewrite)_
 
-- **Theme (light/dark)**       | Already modelled in `ReadingState.theme`; inject CSS vars into Shadow DOM on theme change.
+- **Theme (light/dark)** | Already modelled in `ReadingState.theme`; inject CSS vars into Shadow DOM on theme change.
 
 ---
 
-## Phase 7 — Scrolled Mode Lazy-Loading Optimizations
+## Phase 7A — Section Virtualization _(scrolled mode)_
 
-**Goal:** Keep scrolled mode responsive for very large books by bounding mounted DOM size and deferring expensive work until content is near the viewport.
+**Goal:** Bound the number of sections mounted in the DOM so memory stays roughly constant regardless of how far the user scrolls.
 
-### Changes
+### Changes to `src/components/SectionViewer.tsx`
 
-1. **Virtualize mounted sections in `src/components/SectionViewer.tsx`:**
-   - Keep only the visible section plus a small buffer, for example current ±2 sections.
-   - Unmount sections that move far outside the viewport.
-   - Preserve scroll position when removing sections above the viewport by replacing their DOM with height placeholders or adjusting `scrollTop` by the removed height.
-
-2. **Track mounted section measurements:**
-   - Store measured heights by section index after each section lays out.
-   - Reuse measured heights when temporarily replacing removed sections with placeholders.
-   - Invalidate affected measurements when zoom changes, mode changes, or section content is re-rendered.
-
-3. **Improve image loading behavior:**
-   - Add `loading="lazy"` and `decoding="async"` to images injected into scrolled sections where safe.
-   - Avoid awaiting image decode for sections that are not near the viewport.
-   - Run layout stabilization only for sections that are visible or within the preload buffer.
-
-4. **Throttle expensive anchor work:**
-   - Keep the existing debounced persistence path, but avoid full text-node walks on every scroll event.
-   - Use the topmost visible mounted section as the search root before falling back to the whole flow.
-   - Consider `requestIdleCallback` for non-critical position updates during fast scrolling.
-
-5. **Add defensive cleanup:**
-   - Disconnect observers and cancel pending animation/layout work when switching mode, changing books, or unmounting the component.
-   - Ensure placeholders, sentinels, and mounted-range refs cannot drift out of sync after rapid scrolling.
+1. Define a `BUFFER = 2` constant. At any time, keep only sections in the range `[visibleSection - BUFFER, visibleSection + BUFFER]` mounted inside `.flow`.
+2. After mounting a new adjacent section, check whether the opposite end of the mounted range now exceeds the buffer. If so, **unmount** the farthest section:
+   - When removing a section **above** the viewport, replace its DOM node with a `<div class="flow-placeholder" data-section-index="…" style="height:${measuredHeight}px">` so the scroll position is preserved. Adjust `wrapper.scrollTop` by `(placeholder.offsetHeight - removedHeight)` if there is any rounding discrepancy.
+   - When removing a section **below** the viewport, simply remove the node (no scroll compensation needed).
+3. Update `mountedRangeRef` after each removal.
+4. When the sentinel for a section that was previously unmounted becomes visible again, remove the placeholder and re-mount the full section in its place, compensating `scrollTop` the same way.
 
 ### Verification
 
-1. Long book in scrolled mode keeps only the visible section buffer mounted in the DOM.
-2. Scrolling forward and backward does not jump when old sections are removed or remounted.
-3. Memory usage remains roughly bounded after scrolling through many sections.
-4. Image-heavy sections load smoothly without blocking unrelated off-screen sections.
-5. Rapid mode toggles, zoom changes, and TOC jumps do not leave stale sentinels, placeholders, or observers behind.
+1. Open a long book in scrolled mode. After scrolling forward through > 5 sections, DOM contains at most `2 * BUFFER + 1 = 5` section wrappers.
+2. Scrolling back through already-visited sections re-mounts them without a visible jump.
+3. `mountedRangeRef` never contains stale indices after rapid forward/backward scrolling.
+
+---
+
+## Phase 7B — Section Height Cache _(depends on Phase 7A)_
+
+**Goal:** Make placeholder heights accurate by recording each section's rendered height after layout, and keep those measurements consistent when zoom or content changes.
+
+### Changes to `src/components/SectionViewer.tsx`
+
+1. Add a `sectionHeightCacheRef = useRef<Map<number, number>>(new Map())` to store measured heights keyed by section index.
+2. After `waitForContentLayout` resolves for a scrolled section, record its `offsetHeight` in the cache.
+3. When creating a placeholder for a removed section, look up its cached height. If not cached, use a reasonable fallback (e.g. `wrapper.clientHeight`) until the section is re-mounted and re-measured.
+4. Invalidate the entire cache when:
+   - `zoom` changes (layout dimensions change).
+   - `mode` changes to scrolled (fresh render, old measurements are meaningless).
+   - The component unmounts.
+5. Do **not** invalidate individual entries when an unrelated section is re-rendered.
+
+### Verification
+
+1. After scrolling through several sections each gets an entry in the height cache.
+2. Removing and re-inserting a placeholder uses the cached height — the page does not jump.
+3. Changing zoom clears the cache; re-scrolling re-populates it with updated values.
+
+---
+
+## Phase 7C — Lazy Image Loading in Scrolled Mode _(depends on Phase 7A)_
+
+**Goal:** Prevent off-screen section images from blocking layout stabilization and consuming bandwidth before the user reaches them.
+
+### Changes to `src/components/SectionViewer.tsx`
+
+1. In `createScrolledSection`, after `setSectionContent` populates the wrapper, iterate over all `<img>` elements inside it and set:
+   - `img.loading = "lazy"` — browser defers network fetch until the image is near the viewport.
+   - `img.decoding = "async"` — browser decodes off the main thread.
+2. In `waitForContentLayout`, add a parameter `isNearViewport: boolean`. When `false`, skip awaiting image load/decode events entirely (the function still waits for fonts and two animation frames, but does not block on images).
+3. Call `waitForContentLayout(section, /* isNearViewport= */ true)` only for the **initial** section and for sections mounted within `BUFFER = 1` of the current viewport. Sections at the outer edge of the preload buffer (`BUFFER = 2`) use `isNearViewport = false`.
+
+### Verification
+
+1. Network tab shows images in buffer-edge sections not fetched until scrolled closer.
+2. The visible section still waits for images before snapping layout.
+3. `estimateTotalPages` (off-screen measurement) is unaffected — it already renders in a hidden container that is not governed by `createScrolledSection`.
+
+---
+
+## Phase 7D — Anchor-Save Throttling _(depends on Phase 7A)_
+
+**Goal:** Reduce main-thread cost during fast scrolling by avoiding redundant full-document text-node walks.
+
+### Changes to `src/components/SectionViewer.tsx`
+
+1. In `saveAnchor`, before calling `getTopmostVisibleAnchor` on the whole flow, first call `getTopmostVisibleSection` to identify the topmost visible section wrapper. Pass **that element** as the root to `getTopmostVisibleAnchor` instead of `flowRef.current`. Fall back to the full flow only if no section wrapper is visible.
+2. Wrap the `onPositionChange` persistence call (the `setTimeout` at 300 ms) with `requestIdleCallback` where available, so the write is deferred until the browser is idle:
+   ```ts
+   const persist = () =>
+     onPositionChangeRef.current({ sectionIndex, anchor: newAnchor });
+   if (typeof requestIdleCallback !== "undefined") {
+     requestIdleCallback(persist, { timeout: 1000 });
+   } else {
+     setTimeout(persist, 300);
+   }
+   ```
+3. Cancel any pending `requestIdleCallback` handle (alongside the existing `saveTimerRef` cancel) when `saveAnchor` is called again before the callback fires.
+
+### Verification
+
+1. DevTools Performance trace during fast scroll shows no long tasks attributable to text-node walks.
+2. Position is still persisted within ~1 second of the user stopping.
+3. Changing section via TOC still calls `onPositionChange` promptly (idle callback has a 1 s timeout).
+
+---
+
+## Phase 7E — Defensive Observer & Ref Cleanup _(depends on Phases 7A–7D)_
+
+**Goal:** Ensure no stale observers, placeholders, idle callbacks, or ref values survive across mode toggles, book changes, or rapid TOC jumps.
+
+### Changes to `src/components/SectionViewer.tsx`
+
+1. Extract a `teardownScrolled()` helper that:
+   - Disconnects and nulls `intersectObserverRef`.
+   - Nulls `topSentinelRef` and `bottomSentinelRef`.
+   - Cancels any pending `requestIdleCallback` handles and `saveTimerRef`.
+   - Clears `.flow` children.
+   - Resets `mountedRangeRef` to `{ first: currentSection, last: currentSection }`.
+2. Call `teardownScrolled()` at the top of `renderScrolled` (before creating new sentinels) and at the top of the `mode → paginated` branch in the mode-change effect.
+3. In the component unmount cleanup (the `return` of the mount `useEffect`), call `teardownScrolled()` and also disconnect the `ResizeObserver`.
+4. After a TOC jump (`currentSection` prop change) in scrolled mode, call `teardownScrolled()` before calling `renderScrolled(newSection)` so no stale sentinels from the previous position remain.
+5. Guard every sentinel `IntersectionObserver` callback with a `renderId` check identical to the one already used in `renderPaginated`, so a callback fired for a stale render cycle is silently dropped.
+
+### Verification
+
+1. Toggling mode 10 times rapidly leaves exactly one `IntersectionObserver` connected.
+2. Jumping via TOC while mid-scroll does not leave orphaned sentinels or placeholders in the DOM.
+3. Unmounting the component (navigating back to library) leaves no active timers or observers (verify via a `console.warn` stub on `setTimeout` / `observe` after unmount).
 
 ---
 
