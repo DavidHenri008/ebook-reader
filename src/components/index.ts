@@ -3,4 +3,4 @@
 
 export { default as BookCard } from "./BookCard";
 export { default as FilePicker } from "./FilePicker";
-export { default as SectionViewer } from "./SectionViewer";
+export { default as SectionViewer } from "./sectionViewer/SectionViewer";
