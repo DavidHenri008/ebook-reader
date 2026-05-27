@@ -313,10 +313,13 @@ function ReaderPage() {
         const result = await extractRawBook(
           fileData,
           bookId,
-          (done, total) => {
+          (done, total, message) => {
             if (!cancelled) {
               setExtractionProgress(
-                `Extracting section ${done + 1} of ${total}...`,
+                message ??
+                  (total > 0
+                    ? `Extracting… ${done} / ${total} sections`
+                    : "Extracting book…"),
               );
             }
           },
@@ -336,7 +339,9 @@ function ReaderPage() {
         setToc(result.toc);
         setExtractionProgress(null);
       } catch (e) {
-        if (controller.signal.aborted) return;
+        if (controller.signal.aborted) {
+          return;
+        }
         throw e;
       }
     };
@@ -410,11 +415,15 @@ function ReaderPage() {
     });
   }, [bookId]);
 
+  const handleBackToLibrary = useCallback(() => {
+    navigate("/");
+  }, [navigate]);
+
   if (!file) {
     return (
       <Root>
         <Toolbar>
-          <Button onClick={() => navigate("/")}>← Library</Button>
+          <Button onClick={handleBackToLibrary}>← Library</Button>
           <BookTitle />
           <NavControls>
             <Button
@@ -438,7 +447,7 @@ function ReaderPage() {
     return (
       <Root>
         <Toolbar>
-          <Button onClick={() => navigate("/")}>← Library</Button>
+          <Button onClick={handleBackToLibrary}>← Library</Button>
           <BookTitle>{file.name}</BookTitle>
           <NavControls>
             <Button
@@ -462,7 +471,7 @@ function ReaderPage() {
     return (
       <Root>
         <Toolbar>
-          <Button onClick={() => navigate("/")}>← Library</Button>
+          <Button onClick={handleBackToLibrary}>← Library</Button>
           <BookTitle>{file.name}</BookTitle>
           <NavControls>
             <Button
@@ -488,7 +497,7 @@ function ReaderPage() {
   return (
     <Root>
       <Toolbar>
-        <Button onClick={() => navigate("/")}>← Library</Button>
+        <Button onClick={handleBackToLibrary}>← Library</Button>
         <BookTitle>{file.name}</BookTitle>
         <NavControls>
           <ModeSelect
