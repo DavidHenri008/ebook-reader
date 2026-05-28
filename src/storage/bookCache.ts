@@ -11,25 +11,6 @@ import {
 const META_STORE = "extracted-books-raw" as const;
 const SECTIONS_STORE = "extracted-sections" as const;
 
-// ---- cache encoding helpers ----
-
-async function decompressString(buffer: ArrayBuffer): Promise<string> {
-  const ds = new DecompressionStream("deflate-raw");
-  const writer = ds.writable.getWriter();
-  void writer.write(new Uint8Array(buffer));
-  void writer.close();
-  return new Response(ds.readable).text();
-}
-
-async function restoreHtml(
-  html: ArrayBuffer | string,
-  compression?: "deflate-raw" | "none",
-): Promise<string> {
-  if (typeof html === "string") return html;
-  if (compression === "none") return new TextDecoder().decode(html);
-  return decompressString(html);
-}
-
 /**
  * Save a raw extracted book to the cache.
  * Each section is stored as an individual record so the structured-clone
@@ -47,12 +28,11 @@ export async function saveRawBook(
         bookId: book.bookId,
         index: section.index,
         href: section.href,
-        html: section.html,
-        compression: "none" as const,
+        html: new Blob([section.html], { type: "text/html;charset=utf-8" }),
         textLength: section.textLength,
         viewport: section.viewport,
       })),
-    { detail: `${book.sections.length} sections, uncompressed` },
+    { detail: `${book.sections.length} sections, blob html` },
   );
 
   const db = await measureAsync(onTiming, "cache:open-db", () => getDb());
@@ -106,19 +86,11 @@ export async function loadRawBook(
   reportTiming(onTiming, "cache:sort-sections", sortStartedAt, {
     detail: `${sorted.length} sections`,
   });
-  const compressedCount = sorted.filter(
-    (section) => typeof section.html !== "string",
-  ).length;
   const htmlStrings = await measureAsync(
     onTiming,
     "cache:restore-section-html",
-    () =>
-      Promise.all(
-        sorted.map((section) =>
-          restoreHtml(section.html, section.compression),
-        ),
-      ),
-    { detail: `${sorted.length} sections, ${compressedCount} compressed` },
+    () => Promise.all(sorted.map((section) => section.html.text())),
+    { detail: `${sorted.length} blob sections` },
   );
   const sections: RawSection[] = sorted.map((section, i) => ({
     index: section.index,

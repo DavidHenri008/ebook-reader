@@ -470,7 +470,6 @@ export async function extractRawBook(
           });
         }
       }
-
     }
 
     await reportProgress(
