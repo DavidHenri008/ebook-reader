@@ -445,10 +445,11 @@ export function sectionIndexForHref(
   href: string,
 ): number {
   const cleanHref = href.split("#")[0];
-  for (const section of sections) {
+  for (let arrayIndex = 0; arrayIndex < sections.length; arrayIndex++) {
+    const section = sections[arrayIndex];
     const cleanSectionHref = section.href.split("#")[0];
     if (cleanSectionHref === cleanHref || section.href === href) {
-      return section.index;
+      return arrayIndex;
     }
   }
   return 0;

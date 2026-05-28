@@ -590,8 +590,13 @@ export function useSectionViewer({
     const themeChanged = themeRef.current !== theme;
     const modeChanged = modeRef.current !== mode;
 
-    if (!sectionChanged && !zoomChanged && !themeChanged && !modeChanged)
+    if (!sectionChanged && !zoomChanged && !themeChanged && !modeChanged) {
+      if (mode === "scrolled" && flowRef.current?.childElementCount === 0) {
+        renderScrolled(currentSection);
+        requestAnimationFrame(() => restoreAnchor(anchor, mode, zoom));
+      }
       return;
+    }
 
     sectionRef.current = currentSection;
     zoomRef.current = zoom;
@@ -663,8 +668,10 @@ export function useSectionViewer({
 
   useEffect(() => {
     return () => {
+      mountedRef.current = false;
       teardownScrolled();
       resizeObserverRef.current?.disconnect();
+      resizeObserverRef.current = null;
     };
   }, [teardownScrolled]);
 

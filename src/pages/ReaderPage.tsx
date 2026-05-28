@@ -173,6 +173,23 @@ function yieldToReaderPaint(): Promise<void> {
   });
 }
 
+function normalizeAnchor(value: number | undefined): number {
+  return typeof value === "number" && Number.isFinite(value)
+    ? Math.max(0, value)
+    : 0;
+}
+
+function normalizeSectionIndex(value: number | undefined): number {
+  return typeof value === "number" && Number.isFinite(value)
+    ? Math.max(0, Math.trunc(value))
+    : 0;
+}
+
+function clampSectionIndex(value: number, sectionCount: number): number {
+  if (sectionCount <= 0) return 0;
+  return Math.min(normalizeSectionIndex(value), sectionCount - 1);
+}
+
 function TocList({
   items,
   depth = 0,
@@ -241,12 +258,12 @@ function ReaderPage() {
     const pageCounts = sectionTextLengths.map((textLength) =>
       Math.max(1, Math.ceil(textLength / charsPerPage)),
     );
-    const safeSection = Math.min(Math.max(currentSection, 0), sectionCount - 1);
+    const safeSection = clampSectionIndex(currentSection, sectionCount);
     const previousPages = pageCounts
       .slice(0, safeSection)
       .reduce((sum, count) => sum + count, 0);
     const textLength = sectionTextLengths[safeSection] ?? 0;
-    const safeAnchor = Math.min(Math.max(anchor, 0), textLength);
+    const safeAnchor = Math.min(normalizeAnchor(anchor), textLength);
     const pageInSection = Math.min(
       pageCounts[safeSection] ?? 1,
       Math.floor(safeAnchor / charsPerPage) + 1,
@@ -275,8 +292,10 @@ function ReaderPage() {
         setMode(state.mode);
         if (state.theme) setTheme(state.theme);
         if (state.lastLocation) {
-          setCurrentSection(Math.max(0, state.lastLocation.sectionIndex));
-          setAnchor(Math.max(0, state.lastLocation.anchor));
+          setCurrentSection(
+            normalizeSectionIndex(state.lastLocation.sectionIndex),
+          );
+          setAnchor(normalizeAnchor(state.lastLocation.anchor));
         }
       }
     });
@@ -370,16 +389,20 @@ function ReaderPage() {
   // Persist position changes reported by SectionViewer
   const handlePositionChange = useCallback(
     (pos: { sectionIndex: number; anchor: number }) => {
-      setCurrentSection(pos.sectionIndex);
-      setAnchor(pos.anchor);
-      if (bookId) saveReadingState(bookId, { lastLocation: pos });
+      const nextPosition = {
+        sectionIndex: normalizeSectionIndex(pos.sectionIndex),
+        anchor: normalizeAnchor(pos.anchor),
+      };
+      setCurrentSection(nextPosition.sectionIndex);
+      setAnchor(nextPosition.anchor);
+      if (bookId) saveReadingState(bookId, { lastLocation: nextPosition });
     },
     [bookId],
   );
 
   // Track section navigation (section-boundary crossing, scrolled sentinels)
   const handleSectionNavigate = useCallback((sectionIndex: number) => {
-    setCurrentSection(sectionIndex);
+    setCurrentSection(normalizeSectionIndex(sectionIndex));
   }, []);
 
   const handleNavigate = useCallback(
@@ -508,6 +531,12 @@ function ReaderPage() {
     );
   }
 
+  const safeCurrentSection = clampSectionIndex(
+    currentSection,
+    extractedBook.sections.length,
+  );
+  const safeAnchor = normalizeAnchor(anchor);
+
   return (
     <Root>
       <Toolbar>
@@ -555,11 +584,8 @@ function ReaderPage() {
         <SectionViewer
           sections={extractedBook.sections}
           bookId={bookId ?? ""}
-          currentSection={Math.min(
-            Math.max(currentSection, 0),
-            extractedBook.sections.length - 1,
-          )}
-          anchor={anchor}
+          currentSection={safeCurrentSection}
+          anchor={safeAnchor}
           zoom={zoom}
           mode={mode}
           theme={theme}
