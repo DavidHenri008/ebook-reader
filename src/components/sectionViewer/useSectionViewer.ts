@@ -29,6 +29,8 @@ import {
 } from "./scrolled";
 import { getColDims } from "./paginated";
 
+const SCROLLED_POSITION_SAVE_DELAY_MS = 160;
+
 export interface SectionViewerProps {
   sections: RawSection[];
   bookId: string;
@@ -103,6 +105,10 @@ export function useSectionViewer({
   });
   const topSentinelRef = useRef<HTMLDivElement | null>(null);
   const bottomSentinelRef = useRef<HTMLDivElement | null>(null);
+  const scrollFrameRef = useRef<number | null>(null);
+  const scrolledPositionSaveTimerRef = useRef<ReturnType<
+    typeof setTimeout
+  > | null>(null);
 
   // ── Idle/timer handle (replaces separate saveTimer + saveIdleCallback) ──
   const idleHandleRef = useRef<{ cancel: () => void } | null>(null);
@@ -278,10 +284,58 @@ export function useSectionViewer({
     onPositionChangeRef.current(position);
   }, [readVisiblePosition]);
 
-  // Stable ref so IntersectionObserver callbacks always call the latest version
-  const saveAnchorRef = useRef(saveAnchor);
-  useEffect(() => {
-    saveAnchorRef.current = saveAnchor;
+  const cancelPendingScrolledWork = useCallback(() => {
+    if (scrollFrameRef.current !== null) {
+      cancelAnimationFrame(scrollFrameRef.current);
+      scrollFrameRef.current = null;
+    }
+
+    if (scrolledPositionSaveTimerRef.current) {
+      clearTimeout(scrolledPositionSaveTimerRef.current);
+      scrolledPositionSaveTimerRef.current = null;
+    }
+  }, []);
+
+  const updateScrolledSectionFromViewport = useCallback(() => {
+    const wrapper = wrapperRef.current;
+    const contentRoot = flowRef.current;
+    if (!wrapper || !contentRoot || modeRef.current !== "scrolled") return;
+
+    if (mountedRangeRef.current.first === 0 && wrapper.scrollTop <= 2) {
+      if (sectionRef.current !== 0) {
+        sectionRef.current = 0;
+        onNavigateRef.current?.(0);
+      }
+      return;
+    }
+
+    const rect = wrapper.getBoundingClientRect();
+    const visibleSection = getTopmostVisibleSection(
+      contentRoot,
+      rect.top,
+      rect.bottom,
+    );
+    const visibleSectionIndex = Number(visibleSection?.dataset.sectionIndex);
+
+    if (
+      visibleSection &&
+      Number.isFinite(visibleSectionIndex) &&
+      visibleSectionIndex !== sectionRef.current
+    ) {
+      sectionRef.current = visibleSectionIndex;
+      onNavigateRef.current?.(visibleSectionIndex);
+    }
+  }, []);
+
+  const scheduleScrolledPositionSave = useCallback(() => {
+    if (scrolledPositionSaveTimerRef.current) {
+      clearTimeout(scrolledPositionSaveTimerRef.current);
+    }
+
+    scrolledPositionSaveTimerRef.current = setTimeout(() => {
+      scrolledPositionSaveTimerRef.current = null;
+      saveAnchor();
+    }, SCROLLED_POSITION_SAVE_DELAY_MS);
   }, [saveAnchor]);
 
   const restoreAnchor = useCallback(
@@ -432,6 +486,7 @@ export function useSectionViewer({
   const teardownScrolled = useCallback(
     (flushPosition = false) => {
       if (flushPosition) flushAnchor();
+      cancelPendingScrolledWork();
       intersectObserverRef.current?.disconnect();
       intersectObserverRef.current = null;
       topSentinelRef.current = null;
@@ -444,7 +499,7 @@ export function useSectionViewer({
         last: sectionRef.current,
       };
     },
-    [flushAnchor],
+    [cancelPendingScrolledWork, flushAnchor],
   );
 
   const mountPreviousScrolledSection = useCallback((): boolean => {
@@ -554,8 +609,11 @@ export function useSectionViewer({
             }
           });
           if (mounted) {
-            requestAnimationFrame(ensureScrolledRangeAroundViewport);
-            saveAnchorRef.current();
+            requestAnimationFrame(() => {
+              ensureScrolledRangeAroundViewport();
+              updateScrolledSectionFromViewport();
+            });
+            scheduleScrolledPositionSave();
           }
         },
         { root: wrapperRef.current, rootMargin: "600px 0px" },
@@ -584,6 +642,8 @@ export function useSectionViewer({
       mountPreviousScrolledSection,
       mountNextScrolledSection,
       ensureScrolledRangeAroundViewport,
+      updateScrolledSectionFromViewport,
+      scheduleScrolledPositionSave,
     ],
   );
 
@@ -843,12 +903,27 @@ export function useSectionViewer({
     const wrapper = wrapperRef.current;
     if (!wrapper || mode !== "scrolled") return;
     const handleScroll = () => {
-      ensureScrolledRangeAroundViewport();
-      saveAnchor();
+      if (scrollFrameRef.current === null) {
+        scrollFrameRef.current = requestAnimationFrame(() => {
+          scrollFrameRef.current = null;
+          ensureScrolledRangeAroundViewport();
+          updateScrolledSectionFromViewport();
+        });
+      }
+      scheduleScrolledPositionSave();
     };
     wrapper.addEventListener("scroll", handleScroll, { passive: true });
-    return () => wrapper.removeEventListener("scroll", handleScroll);
-  }, [mode, saveAnchor, ensureScrolledRangeAroundViewport]);
+    return () => {
+      wrapper.removeEventListener("scroll", handleScroll);
+      cancelPendingScrolledWork();
+    };
+  }, [
+    mode,
+    ensureScrolledRangeAroundViewport,
+    updateScrolledSectionFromViewport,
+    scheduleScrolledPositionSave,
+    cancelPendingScrolledWork,
+  ]);
 
   return {
     wrapperRef,

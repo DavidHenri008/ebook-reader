@@ -641,9 +641,7 @@ function ReaderPage() {
           </TocContent>
           <PositionText>
             <PositionLabel>Position</PositionLabel>
-            {pagePosition.estimated ? "~Page" : "Page"} {pagePosition.page} of{" "}
-            {pagePosition.estimated ? "~" : ""}
-            {pagePosition.total}
+            Page {pagePosition.page} of {pagePosition.total}
           </PositionText>
         </Sidebar>
 
