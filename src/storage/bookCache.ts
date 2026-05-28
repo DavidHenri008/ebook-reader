@@ -29,9 +29,7 @@ function yieldToBrowser(): Promise<void> {
  * Each section is stored as an individual record so the structured-clone
  * step never needs to hold the entire book in memory at once.
  */
-export async function saveRawBook(
-  book: RawExtractedBook,
-): Promise<void> {
+export async function saveRawBook(book: RawExtractedBook): Promise<void> {
   const storedSections = book.sections.map((section) => ({
     bookId: book.bookId,
     index: section.index,
