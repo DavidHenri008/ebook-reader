@@ -19,7 +19,8 @@ interface StoredSection {
   bookId: string;
   index: number;
   href: string;
-  html: ArrayBuffer;
+  html: ArrayBuffer | string;
+  compression?: "deflate-raw" | "none";
   textLength: number;
   viewport?: { width: number; height: number };
 }

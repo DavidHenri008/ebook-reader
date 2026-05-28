@@ -12,6 +12,8 @@ import { extractRawBook, sectionIndexForHref } from "../services/bookExtractor";
 import { estimateCharsPerPage } from "../services/pageEstimation";
 import type { TocItem, ReadingState, ReadingMode, Theme } from "../types";
 import type { RawExtractedBook } from "../types/bookPages";
+import type { BookTimingEntry, BookTimingReporter } from "../types/performance";
+import { getTimestamp, measureAsync, reportTiming } from "../utils/timing";
 
 //#region Styled Components
 const Root = styled.div`
@@ -167,6 +169,58 @@ interface LocationState {
   bookId?: string;
 }
 
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KiB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MiB`;
+}
+
+function yieldToReaderPaint(): Promise<void> {
+  return new Promise((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+  });
+}
+
+function logBookTimings(
+  fileName: string,
+  outcome: string,
+  entries: BookTimingEntry[],
+): void {
+  if (!import.meta.env.DEV || entries.length === 0) return;
+
+  const total = entries.find((entry) => entry.phase === "reader:total");
+  const totalLabel = total ? `, ${total.durationMs.toFixed(1)} ms` : "";
+
+  console.groupCollapsed(
+    `[ebook-reader] ${fileName} ${outcome} timings${totalLabel}`,
+  );
+  console.table(
+    entries.map((entry) => ({
+      phase: entry.phase,
+      durationMs: entry.durationMs,
+      section: entry.sectionIndex ?? "",
+      href: entry.href ?? "",
+      detail: entry.detail ?? "",
+    })),
+  );
+
+  const slowestSections = entries
+    .filter((entry) => entry.phase === "section:total")
+    .sort((a, b) => b.durationMs - a.durationMs)
+    .slice(0, 10);
+
+  if (slowestSections.length > 0) {
+    console.table(
+      slowestSections.map((entry) => ({
+        section: entry.sectionIndex ?? "",
+        href: entry.href ?? "",
+        durationMs: entry.durationMs,
+      })),
+    );
+  }
+  console.groupEnd();
+}
+
 function TocList({
   items,
   depth = 0,
@@ -291,25 +345,45 @@ function ReaderPage() {
     const controller = new AbortController();
 
     const run = async () => {
+      const timingEntries: BookTimingEntry[] = [];
+      const recordTiming: BookTimingReporter | undefined = import.meta.env.DEV
+        ? (entry) => {
+            timingEntries.push(entry);
+          }
+        : undefined;
+      const readerStartedAt = getTimestamp();
+      let timingOutcome = "cancelled";
+
       // Try cache first
-      const cached = await loadRawBook(bookId);
-      if (cached) {
-        if (!cancelled) {
-          setExtractedBook(cached);
-          setToc(cached.toc);
-          setExtractionProgress(null);
-        }
-        return;
-      }
-
-      if (cancelled) return;
-
-      // Full extraction
-      setExtractionProgress("Extracting book...");
-      const fileData = await file.arrayBuffer();
-      if (cancelled) return;
-
       try {
+        const cached = await measureAsync(
+          recordTiming,
+          "reader:cache-load-total",
+          () => loadRawBook(bookId, recordTiming),
+          { detail: bookId },
+        );
+        if (cached) {
+          timingOutcome = "cache hit";
+          if (!cancelled) {
+            setExtractedBook(cached);
+            setToc(cached.toc);
+            setExtractionProgress(null);
+          }
+          return;
+        }
+
+        if (cancelled) return;
+
+        // Full extraction
+        setExtractionProgress("Extracting book...");
+        const fileData = await measureAsync(
+          recordTiming,
+          "reader:file-array-buffer",
+          () => file.arrayBuffer(),
+          { detail: formatBytes(file.size) },
+        );
+        if (cancelled) return;
+
         const result = await extractRawBook(
           fileData,
           bookId,
@@ -324,25 +398,47 @@ function ReaderPage() {
             }
           },
           controller.signal,
+          recordTiming,
         );
-
-        if (!cancelled) setExtractionProgress("Saving to cache...");
-        try {
-          await saveRawBook(result);
-        } catch (e) {
-          console.warn("Failed to cache book:", e);
-        }
 
         if (cancelled) return;
 
         setExtractedBook(result);
         setToc(result.toc);
         setExtractionProgress(null);
+        timingOutcome = "fresh extraction";
+
+        void (async () => {
+          await yieldToReaderPaint();
+          try {
+            await measureAsync(
+              recordTiming,
+              "reader:cache-save-total",
+              () => saveRawBook(result, recordTiming),
+              { detail: `${result.sections.length} sections` },
+            );
+          } catch (e) {
+            console.warn("Failed to cache book:", e);
+          } finally {
+            if (!cancelled) {
+              logBookTimings(file.name, "background cache save", timingEntries);
+            }
+          }
+        })();
       } catch (e) {
         if (controller.signal.aborted) {
+          timingOutcome = "aborted";
           return;
         }
+        timingOutcome = "failed";
         throw e;
+      } finally {
+        reportTiming(recordTiming, "reader:total", readerStartedAt, {
+          detail: timingOutcome,
+        });
+        if (!cancelled) {
+          logBookTimings(file.name, timingOutcome, timingEntries);
+        }
       }
     };
 

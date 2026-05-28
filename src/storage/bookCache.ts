@@ -1,18 +1,17 @@
 import { getDb } from "./db";
 import type { RawExtractedBook, RawSection } from "../types/bookPages";
+import type { BookTimingReporter } from "../types/performance";
+import {
+  getTimestamp,
+  measureAsync,
+  measureSync,
+  reportTiming,
+} from "../utils/timing";
 
 const META_STORE = "extracted-books-raw" as const;
 const SECTIONS_STORE = "extracted-sections" as const;
 
-// ---- compression helpers ----
-
-async function compressString(str: string): Promise<ArrayBuffer> {
-  const cs = new CompressionStream("deflate-raw");
-  const writer = cs.writable.getWriter();
-  void writer.write(new TextEncoder().encode(str));
-  void writer.close();
-  return new Response(cs.readable).arrayBuffer();
-}
+// ---- cache encoding helpers ----
 
 async function decompressString(buffer: ArrayBuffer): Promise<string> {
   const ds = new DecompressionStream("deflate-raw");
@@ -22,19 +21,42 @@ async function decompressString(buffer: ArrayBuffer): Promise<string> {
   return new Response(ds.readable).text();
 }
 
+async function restoreHtml(
+  html: ArrayBuffer | string,
+  compression?: "deflate-raw" | "none",
+): Promise<string> {
+  if (typeof html === "string") return html;
+  if (compression === "none") return new TextDecoder().decode(html);
+  return decompressString(html);
+}
+
 /**
  * Save a raw extracted book to the cache.
  * Each section is stored as an individual record so the structured-clone
  * step never needs to hold the entire book in memory at once.
  */
-export async function saveRawBook(book: RawExtractedBook): Promise<void> {
-  // Compress all HTML in parallel before opening the IDB transaction.
-  // Awaiting inside a transaction would cause it to auto-commit prematurely.
-  const compressedHtml = await Promise.all(
-    book.sections.map((s) => compressString(s.html)),
+export async function saveRawBook(
+  book: RawExtractedBook,
+  onTiming?: BookTimingReporter,
+): Promise<void> {
+  const storedSections = measureSync(
+    onTiming,
+    "cache:prepare-sections",
+    () =>
+      book.sections.map((section) => ({
+        bookId: book.bookId,
+        index: section.index,
+        href: section.href,
+        html: section.html,
+        compression: "none" as const,
+        textLength: section.textLength,
+        viewport: section.viewport,
+      })),
+    { detail: `${book.sections.length} sections, uncompressed` },
   );
 
-  const db = await getDb();
+  const db = await measureAsync(onTiming, "cache:open-db", () => getDb());
+  const writeStartedAt = getTimestamp();
   const tx = db.transaction([META_STORE, SECTIONS_STORE], "readwrite");
 
   tx.objectStore(META_STORE).put({
@@ -44,19 +66,17 @@ export async function saveRawBook(book: RawExtractedBook): Promise<void> {
     extractedAt: book.extractedAt,
   });
 
-  for (let i = 0; i < book.sections.length; i++) {
-    const section = book.sections[i];
-    tx.objectStore(SECTIONS_STORE).put({
-      bookId: book.bookId,
-      index: section.index,
-      href: section.href,
-      html: compressedHtml[i],
-      textLength: section.textLength,
-      viewport: section.viewport,
-    });
+  for (const section of storedSections) {
+    tx.objectStore(SECTIONS_STORE).put(section);
   }
 
-  await tx.done;
+  try {
+    await tx.done;
+  } finally {
+    reportTiming(onTiming, "cache:write-indexeddb", writeStartedAt, {
+      detail: `${book.sections.length} sections`,
+    });
+  }
 }
 
 /**
@@ -64,15 +84,41 @@ export async function saveRawBook(book: RawExtractedBook): Promise<void> {
  */
 export async function loadRawBook(
   bookId: string,
+  onTiming?: BookTimingReporter,
 ): Promise<RawExtractedBook | null> {
-  const db = await getDb();
-  const meta = await db.get(META_STORE, bookId);
+  const db = await measureAsync(onTiming, "cache:open-db", () => getDb());
+  const meta = await measureAsync(
+    onTiming,
+    "cache:read-meta",
+    () => db.get(META_STORE, bookId),
+    { detail: bookId },
+  );
   if (!meta) return null;
 
-  const stored = await db.getAllFromIndex(SECTIONS_STORE, "byBook", bookId);
+  const stored = await measureAsync(
+    onTiming,
+    "cache:read-sections",
+    () => db.getAllFromIndex(SECTIONS_STORE, "byBook", bookId),
+    { detail: bookId },
+  );
+  const sortStartedAt = getTimestamp();
   const sorted = stored.sort((a, b) => a.index - b.index);
-  const htmlStrings = await Promise.all(
-    sorted.map((s) => decompressString(s.html)),
+  reportTiming(onTiming, "cache:sort-sections", sortStartedAt, {
+    detail: `${sorted.length} sections`,
+  });
+  const compressedCount = sorted.filter(
+    (section) => typeof section.html !== "string",
+  ).length;
+  const htmlStrings = await measureAsync(
+    onTiming,
+    "cache:restore-section-html",
+    () =>
+      Promise.all(
+        sorted.map((section) =>
+          restoreHtml(section.html, section.compression),
+        ),
+      ),
+    { detail: `${sorted.length} sections, ${compressedCount} compressed` },
   );
   const sections: RawSection[] = sorted.map((section, i) => ({
     index: section.index,
