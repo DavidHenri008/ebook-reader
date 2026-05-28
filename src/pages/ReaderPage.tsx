@@ -138,7 +138,7 @@ const ProgressText = styled.div`
 const ProgressBody = styled.div`
   flex: 1;
   display: flex;
-  align-items: top;
+  align-items: flex-start;
   justify-content: center;
   margin-top: 4rem;
 `;
@@ -330,8 +330,8 @@ function ReaderPage() {
               setExtractionProgress(
                 message ??
                   (total > 0
-                    ? `Extracting… ${done} / ${total} sections`
-                    : "Extracting book…"),
+                    ? `Extracting... ${done} / ${total} sections`
+                    : "Extracting book..."),
               );
             }
           },

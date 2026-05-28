@@ -22,7 +22,10 @@ type ResourceCollection = {
   urls: string[];
   relativeTo: (url: string) => string[];
   createUrl: (url: string) => Promise<string>;
-  settings: { resolver: (href: string) => string };
+  settings: {
+    resolver: (href: string) => string;
+    replacements: EpubReplacementMode;
+  };
 };
 
 type EpubBook = {
@@ -40,8 +43,10 @@ type EpubBook = {
 
 type EpubFactory = (
   fileData: ArrayBuffer,
-  options: { replacements: "base64" },
+  options: { replacements: EpubReplacementMode },
 ) => EpubBook;
+
+type EpubReplacementMode = "base64" | "blobUrl" | "none";
 
 const createBook = ePub as unknown as EpubFactory;
 const ASSET_ATTRIBUTE_NAMES = [
@@ -53,6 +58,12 @@ const ASSET_ATTRIBUTE_NAMES = [
   "xlink:href",
 ] as const;
 const CSS_URL_PATTERN = /url\(\s*(["']?)([^"')]+)\1\s*\)/gi;
+
+type ExtractionProgressCallback = (
+  done: number,
+  total: number,
+  message?: string,
+) => void;
 
 function mapTocItems(items: NavItem[]): TocItem[] {
   return items.map((item) => ({
@@ -270,9 +281,7 @@ function yieldToBrowser(): Promise<void> {
 }
 
 async function reportProgress(
-  onProgress:
-    | ((done: number, total: number, message?: string) => void)
-    | undefined,
+  onProgress: ExtractionProgressCallback | undefined,
   done: number,
   total: number,
   message?: string,
@@ -286,7 +295,7 @@ async function reportProgress(
 export async function extractRawBook(
   fileData: ArrayBuffer,
   bookId: string,
-  onProgress?: (done: number, total: number, message?: string) => void,
+  onProgress?: ExtractionProgressCallback,
   signal?: AbortSignal,
 ): Promise<RawExtractedBook> {
   throwIfAborted(signal);
@@ -296,7 +305,7 @@ export async function extractRawBook(
   await reportProgress(onProgress, 0, 0, "Opening book...");
   throwIfAborted(signal);
 
-  const book = createBook(fileData, { replacements: "base64" });
+  const book = createBook(fileData, { replacements: "none" });
 
   try {
     await book.ready;
@@ -309,6 +318,9 @@ export async function extractRawBook(
     throwIfAborted(signal);
 
     const resources = book.resources;
+    if (resources) {
+      resources.settings.replacements = "base64";
+    }
     const navPromise = book.loaded.navigation
       .then(() => mapTocItems(book.navigation?.toc ?? []))
       .catch(() => [] as TocItem[]);
@@ -348,14 +360,21 @@ export async function extractRawBook(
       let result = html;
       for (const { relUrl, absUrl } of needed) {
         const dataUri = assetCache.get(absUrl);
-        if (dataUri) result = result.split(relUrl).join(dataUri);
+        if (dataUri) {
+          result = result.split(relUrl).join(dataUri);
+        }
       }
       return result;
     }
 
     const spineItems: SpineItem[] = [];
     book.spine.each((item) => spineItems.push(item));
-    await reportProgress(onProgress, 0, spineItems.length);
+    await reportProgress(
+      onProgress,
+      0,
+      spineItems.length,
+      `Found ${spineItems.length} sections.`,
+    );
 
     const sections: RawSection[] = new Array(spineItems.length);
     const loadFn = book.load.bind(book);
@@ -363,11 +382,12 @@ export async function extractRawBook(
     for (let index = 0; index < spineItems.length; index++) {
       throwIfAborted(signal);
       const item = spineItems[index];
+      const sectionNumber = index + 1;
       await reportProgress(
         onProgress,
-        index + 1,
+        index,
         spineItems.length,
-        `Extracting section ${index + 1} / ${spineItems.length}...`,
+        `Section ${sectionNumber} / ${spineItems.length}`,
       );
       throwIfAborted(signal);
 
@@ -379,17 +399,25 @@ export async function extractRawBook(
         throwIfAborted(signal);
 
         const textLength = getPlainTextLength(html);
+        const viewport = extractViewport(html);
 
         sections[index] = {
           index: item.index,
           href: item.href,
           html,
           textLength,
-          viewport: extractViewport(html),
+          viewport,
         };
       } finally {
         item.unload();
       }
+
+      await reportProgress(
+        onProgress,
+        index + 1,
+        spineItems.length,
+        `Extracted section ${sectionNumber} / ${spineItems.length}.`,
+      );
     }
 
     await reportProgress(
