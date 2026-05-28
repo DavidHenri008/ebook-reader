@@ -12,6 +12,7 @@ import {
   getCurrentLibraryTheme,
   THEME_STORAGE_KEY,
 } from "../storage";
+import { readerPathForBookTitle } from "../utils/bookTitleUrl";
 import type { BookMeta } from "../types";
 import type { Theme } from "../types";
 
@@ -197,7 +198,9 @@ function HomePage() {
     async (book: BookMeta) => {
       const file = await getBookFile(book.id);
       if (file) {
-        navigate("/reader", { state: { file, bookId: book.id, theme } });
+        navigate(readerPathForBookTitle(book.title), {
+          state: { file, bookId: book.id, bookTitle: book.title, theme },
+        });
       }
     },
     [navigate, theme],

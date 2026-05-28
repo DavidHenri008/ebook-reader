@@ -1,16 +1,21 @@
 import { useEffect, useCallback, useMemo, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import styled from "@emotion/styled";
 import { SectionViewer } from "../components";
 import {
   saveReadingState,
   loadReadingState,
   updateLastOpened,
+  getBookMeta,
   getCurrentLibraryTheme,
   THEME_STORAGE_KEY,
 } from "../storage";
 import { saveRawBook, loadRawBook } from "../storage/bookCache";
 import { extractRawBook, sectionIndexForHref } from "../services/bookExtractor";
+import {
+  bookTitleFromUrlSegment,
+  readerPathForBookTitle,
+} from "../utils/bookTitleUrl";
 import {
   getEstimatedPagePosition,
   getMeasuredPagePosition,
@@ -109,6 +114,15 @@ const Button = styled.button`
   &:hover {
     background-color: var(--accent-bg);
   }
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+  }
+
+  &:disabled:hover {
+    background-color: var(--bg);
+  }
 `;
 
 const EmptySidebar = styled.div`
@@ -136,6 +150,11 @@ const ModeSelect = styled.select`
   cursor: pointer;
   font-size: 14px;
   padding: 0.25rem 0.5rem;
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+  }
 `;
 
 const ProgressText = styled.div`
@@ -173,6 +192,7 @@ const PositionLabel = styled.div`
 interface LocationState {
   file?: File;
   bookId?: string;
+  bookTitle?: string;
   theme?: Theme;
 }
 
@@ -231,6 +251,7 @@ function TocList({
 function ReaderPage() {
   const location = useLocation();
   const navigate = useNavigate();
+  const { bookTitle: routeBookTitle } = useParams<{ bookTitle?: string }>();
   const locationState = location.state as LocationState | null;
 
   const file = locationState?.file ?? null;
@@ -259,6 +280,23 @@ function ReaderPage() {
   } | null>(null);
   const [extractionProgress, setExtractionProgress] = useState<string | null>(
     null,
+  );
+  const [loadedBookTitle, setLoadedBookTitle] = useState<{
+    bookId: string;
+    title: string;
+  } | null>(null);
+
+  const titleFromRoute = useMemo(
+    () => bookTitleFromUrlSegment(routeBookTitle),
+    [routeBookTitle],
+  );
+  const storedBookTitle =
+    loadedBookTitle?.bookId === bookId ? loadedBookTitle.title : null;
+  const bookTitle =
+    locationState?.bookTitle ?? storedBookTitle ?? titleFromRoute ?? "";
+  const canonicalReaderPath = useMemo(
+    () => (bookTitle ? readerPathForBookTitle(bookTitle) : null),
+    [bookTitle],
   );
 
   const sectionTextLengths = useMemo(
@@ -300,6 +338,29 @@ function ReaderPage() {
   useEffect(() => {
     if (bookId) updateLastOpened(bookId);
   }, [bookId]);
+
+  useEffect(() => {
+    if (!bookId || locationState?.bookTitle) return;
+
+    let cancelled = false;
+    getBookMeta(bookId).then((book) => {
+      if (!cancelled && book) {
+        setLoadedBookTitle({ bookId, title: book.title });
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [bookId, locationState?.bookTitle]);
+
+  useEffect(() => {
+    if (!canonicalReaderPath || location.pathname === canonicalReaderPath) {
+      return;
+    }
+
+    navigate(canonicalReaderPath, { replace: true, state: location.state });
+  }, [canonicalReaderPath, location.pathname, location.state, navigate]);
 
   useEffect(() => {
     if (!bookId) return;
@@ -520,115 +581,23 @@ function ReaderPage() {
     navigate("/");
   }, [navigate]);
 
-  if (!file) {
-    return (
-      <Root>
-        <Toolbar>
-          <Button onClick={handleBackToLibrary}>← Library</Button>
-          <BookTitle />
-          <NavControls>
-            <Button
-              aria-label="Toggle theme"
-              title={
-                theme === "light"
-                  ? "Switch to dark mode"
-                  : "Switch to light mode"
-              }
-              onClick={toggleTheme}
-            >
-              {theme === "light" ? "☾" : "☀"}
-            </Button>
-          </NavControls>
-        </Toolbar>
-      </Root>
+  const controlsDisabled = !file || !readingState || !extractedBook;
+  let body: React.ReactNode = null;
+
+  if (file && readingState && !extractedBook) {
+    body = (
+      <ProgressBody>
+        <ProgressText>{extractionProgress ?? "Loading..."}</ProgressText>
+      </ProgressBody>
     );
-  }
-
-  if (!readingState) {
-    return (
-      <Root>
-        <Toolbar>
-          <Button onClick={handleBackToLibrary}>← Library</Button>
-          <BookTitle>{file.name}</BookTitle>
-          <NavControls>
-            <Button
-              aria-label="Toggle theme"
-              title={
-                theme === "light"
-                  ? "Switch to dark mode"
-                  : "Switch to light mode"
-              }
-              onClick={toggleTheme}
-            >
-              {theme === "light" ? "☾" : "☀"}
-            </Button>
-          </NavControls>
-        </Toolbar>
-      </Root>
+  } else if (file && readingState && extractedBook) {
+    const safeCurrentSection = clampSectionIndex(
+      currentSection,
+      extractedBook.sections.length,
     );
-  }
+    const safeAnchor = normalizeAnchor(anchor);
 
-  if (extractionProgress || !extractedBook) {
-    return (
-      <Root>
-        <Toolbar>
-          <Button onClick={handleBackToLibrary}>← Library</Button>
-          <BookTitle>{file.name}</BookTitle>
-          <NavControls>
-            <Button
-              aria-label="Toggle theme"
-              title={
-                theme === "light"
-                  ? "Switch to dark mode"
-                  : "Switch to light mode"
-              }
-              onClick={toggleTheme}
-            >
-              {theme === "light" ? "☾" : "☀"}
-            </Button>
-          </NavControls>
-        </Toolbar>
-        <ProgressBody>
-          <ProgressText>{extractionProgress ?? "Loading..."}</ProgressText>
-        </ProgressBody>
-      </Root>
-    );
-  }
-
-  const safeCurrentSection = clampSectionIndex(
-    currentSection,
-    extractedBook.sections.length,
-  );
-  const safeAnchor = normalizeAnchor(anchor);
-
-  return (
-    <Root>
-      <Toolbar>
-        <Button onClick={handleBackToLibrary}>← Library</Button>
-        <BookTitle>{file.name}</BookTitle>
-        <NavControls>
-          <ModeSelect
-            aria-label="Reading mode"
-            value={mode}
-            onChange={handleModeChange}
-          >
-            <option value="scrolled">Scrolled</option>
-            <option value="paginated">Paginated</option>
-          </ModeSelect>
-          <Button onClick={zoomOut}>-</Button>
-          <Zoom>{zoom}%</Zoom>
-          <Button onClick={zoomIn}>+</Button>
-          <Button
-            aria-label="Toggle theme"
-            title={
-              theme === "light" ? "Switch to dark mode" : "Switch to light mode"
-            }
-            onClick={toggleTheme}
-          >
-            {theme === "light" ? "☾" : "☀"}
-          </Button>
-        </NavControls>
-      </Toolbar>
+    body = (
       <Container>
         <Sidebar>
           <SidebarTitle>Contents</SidebarTitle>
@@ -658,6 +627,43 @@ function ReaderPage() {
           onViewportChange={handleViewportChange}
         />
       </Container>
+    );
+  }
+
+  return (
+    <Root>
+      <Toolbar>
+        <Button onClick={handleBackToLibrary}>← Library</Button>
+        <BookTitle title={bookTitle}>{bookTitle}</BookTitle>
+        <NavControls>
+          <ModeSelect
+            aria-label="Reading mode"
+            value={mode}
+            onChange={handleModeChange}
+            disabled={controlsDisabled}
+          >
+            <option value="scrolled">Scrolled</option>
+            <option value="paginated">Paginated</option>
+          </ModeSelect>
+          <Button onClick={zoomOut} disabled={controlsDisabled}>
+            -
+          </Button>
+          <Zoom>{zoom}%</Zoom>
+          <Button onClick={zoomIn} disabled={controlsDisabled}>
+            +
+          </Button>
+          <Button
+            aria-label="Toggle theme"
+            title={
+              theme === "light" ? "Switch to dark mode" : "Switch to light mode"
+            }
+            onClick={toggleTheme}
+          >
+            {theme === "light" ? "☾" : "☀"}
+          </Button>
+        </NavControls>
+      </Toolbar>
+      {body}
     </Root>
   );
 }

@@ -146,6 +146,16 @@ async function getBook(id: string): Promise<StoredBook | undefined> {
 }
 
 /**
+ * Get a book's metadata by ID.
+ * @param id - Book ID (hash)
+ * @returns Promise resolving to BookMeta or undefined
+ */
+export async function getBookMeta(id: string): Promise<BookMeta | undefined> {
+  const book = await getBook(id);
+  return book ? bookToMeta(book) : undefined;
+}
+
+/**
  * Get a book's file as a File object.
  * @param id - Book ID (hash)
  * @returns Promise resolving to File or undefined

@@ -7,6 +7,7 @@ function App() {
       <Routes>
         <Route path="/" element={<HomePage />} />
         <Route path="/reader" element={<ReaderPage />} />
+        <Route path="/reader/:bookTitle" element={<ReaderPage />} />
       </Routes>
     </BrowserRouter>
   );

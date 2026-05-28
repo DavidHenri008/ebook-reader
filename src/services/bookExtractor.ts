@@ -25,7 +25,10 @@ type ResourceCollection = {
   replaceCss?: () => Promise<unknown>;
   settings: {
     archive?: {
-      getBase64: (url: string, mimeType?: string) => Promise<string> | undefined;
+      getBase64: (
+        url: string,
+        mimeType?: string,
+      ) => Promise<string> | undefined;
     };
     resolver: (href: string) => string;
     request: (href: string, type?: string) => Promise<unknown>;
