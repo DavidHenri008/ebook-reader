@@ -133,7 +133,10 @@ export function getEstimatedPagePosition(
     pageCounts[safeSection] ?? 1,
     Math.floor(safeAnchor / charsPerPage) + 1,
   );
-  const total = Math.max(1, pageCounts.reduce((sum, count) => sum + count, 0));
+  const total = Math.max(
+    1,
+    pageCounts.reduce((sum, count) => sum + count, 0),
+  );
 
   return {
     sectionNumber: safeSection + 1,

@@ -9,11 +9,11 @@ import {
   getBookFile,
   deleteRawBook,
   clearAllRawBooks,
+  getCurrentLibraryTheme,
+  THEME_STORAGE_KEY,
 } from "../storage";
 import type { BookMeta } from "../types";
 import type { Theme } from "../types";
-
-const THEME_STORAGE_KEY = "app-theme";
 
 //#region Styled Components
 const Container = styled.div`
@@ -145,9 +145,7 @@ function HomePage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isAdding, setIsAdding] = useState(false);
   const [isClearingCache, setIsClearingCache] = useState(false);
-  const [theme, setTheme] = useState<Theme>(
-    () => (localStorage.getItem(THEME_STORAGE_KEY) as Theme | null) ?? "light",
-  );
+  const [theme, setTheme] = useState<Theme>(() => getCurrentLibraryTheme());
 
   const sortByTitle = useCallback(
     (list: BookMeta[]) =>
@@ -199,10 +197,10 @@ function HomePage() {
     async (book: BookMeta) => {
       const file = await getBookFile(book.id);
       if (file) {
-        navigate("/reader", { state: { file, bookId: book.id } });
+        navigate("/reader", { state: { file, bookId: book.id, theme } });
       }
     },
-    [navigate],
+    [navigate, theme],
   );
 
   const handleRemoveBook = useCallback(async (book: BookMeta) => {

@@ -429,20 +429,23 @@ export function useSectionViewer({
 
   // ── Scrolled render + helpers ────────────────────────────────────────────
 
-  const teardownScrolled = useCallback((flushPosition = false) => {
-    if (flushPosition) flushAnchor();
-    intersectObserverRef.current?.disconnect();
-    intersectObserverRef.current = null;
-    topSentinelRef.current = null;
-    bottomSentinelRef.current = null;
-    idleHandleRef.current?.cancel();
-    idleHandleRef.current = null;
-    flowRef.current?.replaceChildren();
-    mountedRangeRef.current = {
-      first: sectionRef.current,
-      last: sectionRef.current,
-    };
-  }, [flushAnchor]);
+  const teardownScrolled = useCallback(
+    (flushPosition = false) => {
+      if (flushPosition) flushAnchor();
+      intersectObserverRef.current?.disconnect();
+      intersectObserverRef.current = null;
+      topSentinelRef.current = null;
+      bottomSentinelRef.current = null;
+      idleHandleRef.current?.cancel();
+      idleHandleRef.current = null;
+      flowRef.current?.replaceChildren();
+      mountedRangeRef.current = {
+        first: sectionRef.current,
+        last: sectionRef.current,
+      };
+    },
+    [flushAnchor],
+  );
 
   const mountPreviousScrolledSection = useCallback((): boolean => {
     const range = mountedRangeRef.current;
@@ -724,16 +727,12 @@ export function useSectionViewer({
       if (mode === "paginated") {
         teardownScrolled();
         renderPaginated(targetSection, zoom, 0).then(() => {
-          requestAnimationFrame(() =>
-            restoreAnchor(targetAnchor, mode, zoom),
-          );
+          requestAnimationFrame(() => restoreAnchor(targetAnchor, mode, zoom));
         });
       } else {
         teardownScrolled();
         renderScrolled(targetSection);
-        requestAnimationFrame(() =>
-          restoreAnchor(targetAnchor, mode, zoom),
-        );
+        requestAnimationFrame(() => restoreAnchor(targetAnchor, mode, zoom));
       }
       return;
     }

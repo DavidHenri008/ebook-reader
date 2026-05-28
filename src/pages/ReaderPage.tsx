@@ -6,6 +6,8 @@ import {
   saveReadingState,
   loadReadingState,
   updateLastOpened,
+  getCurrentLibraryTheme,
+  THEME_STORAGE_KEY,
 } from "../storage";
 import { saveRawBook, loadRawBook } from "../storage/bookCache";
 import { extractRawBook, sectionIndexForHref } from "../services/bookExtractor";
@@ -171,6 +173,7 @@ const PositionLabel = styled.div`
 interface LocationState {
   file?: File;
   bookId?: string;
+  theme?: Theme;
 }
 
 function yieldToReaderPaint(): Promise<void> {
@@ -232,6 +235,10 @@ function ReaderPage() {
 
   const file = locationState?.file ?? null;
   const bookId = locationState?.bookId ?? null;
+  const libraryTheme = useMemo(
+    () => locationState?.theme ?? getCurrentLibraryTheme(),
+    [locationState?.theme],
+  );
   const [readingState, setReadingState] = useState<ReadingState | null>(null);
 
   const [extractedBook, setExtractedBook] = useState<RawExtractedBook | null>(
@@ -242,9 +249,7 @@ function ReaderPage() {
   const [anchor, setAnchor] = useState(0);
   const [zoom, setZoom] = useState(100);
   const [mode, setMode] = useState<ReadingMode>("scrolled");
-  const [theme, setTheme] = useState<Theme>(
-    () => (localStorage.getItem("app-theme") as Theme | null) ?? "light",
-  );
+  const [theme, setTheme] = useState<Theme>(() => libraryTheme);
   const [viewerViewport, setViewerViewport] = useState<PageViewport | null>(
     null,
   );
@@ -299,7 +304,7 @@ function ReaderPage() {
   useEffect(() => {
     if (!bookId) return;
     let cancelled = false;
-    loadReadingState(bookId).then((state) => {
+    loadReadingState(bookId, libraryTheme).then((state) => {
       if (!cancelled) {
         setReadingState(state);
         setZoom(state.zoom);
@@ -316,7 +321,7 @@ function ReaderPage() {
     return () => {
       cancelled = true;
     };
-  }, [bookId]);
+  }, [bookId, libraryTheme]);
 
   // Apply explicit theme to document root so global CSS vars override the media query
   useEffect(() => {
@@ -438,9 +443,11 @@ function ReaderPage() {
       };
       setCurrentSection(nextPosition.sectionIndex);
       setAnchor(nextPosition.anchor);
-      if (bookId) saveReadingState(bookId, { lastLocation: nextPosition });
+      if (bookId) {
+        saveReadingState(bookId, { lastLocation: nextPosition, theme });
+      }
     },
-    [bookId],
+    [bookId, theme],
   );
 
   // Track section navigation (section-boundary crossing, scrolled sentinels)
@@ -476,35 +483,35 @@ function ReaderPage() {
     () =>
       setZoom((z) => {
         const next = Math.min(z + 10, 400);
-        if (bookId) saveReadingState(bookId, { zoom: next });
+        if (bookId) saveReadingState(bookId, { zoom: next, theme });
         return next;
       }),
-    [bookId],
+    [bookId, theme],
   );
   const zoomOut = useCallback(
     () =>
       setZoom((z) => {
         const next = Math.max(z - 10, 20);
-        if (bookId) saveReadingState(bookId, { zoom: next });
+        if (bookId) saveReadingState(bookId, { zoom: next, theme });
         return next;
       }),
-    [bookId],
+    [bookId, theme],
   );
 
   const handleModeChange = useCallback(
     (e: React.ChangeEvent<HTMLSelectElement>) => {
       const newMode = e.target.value as ReadingMode;
       setMode(newMode);
-      if (bookId) saveReadingState(bookId, { mode: newMode });
+      if (bookId) saveReadingState(bookId, { mode: newMode, theme });
     },
-    [bookId],
+    [bookId, theme],
   );
 
   const toggleTheme = useCallback(() => {
     setTheme((t) => {
       const next: Theme = t === "light" ? "dark" : "light";
       if (bookId) saveReadingState(bookId, { theme: next });
-      localStorage.setItem("app-theme", next);
+      localStorage.setItem(THEME_STORAGE_KEY, next);
       return next;
     });
   }, [bookId]);
