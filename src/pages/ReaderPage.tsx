@@ -218,6 +218,36 @@ function logBookTimings(
       })),
     );
   }
+
+  const slowestCacheRestores = entries
+    .filter((entry) => entry.phase === "cache:restore-section-html-item")
+    .sort((a, b) => b.durationMs - a.durationMs)
+    .slice(0, 10);
+
+  if (slowestCacheRestores.length > 0) {
+    console.table(
+      slowestCacheRestores.map((entry) => ({
+        section: entry.sectionIndex ?? "",
+        href: entry.href ?? "",
+        durationMs: entry.durationMs,
+        detail: entry.detail ?? "",
+      })),
+    );
+  }
+
+  const slowestCacheRestoreBatches = entries
+    .filter((entry) => entry.phase === "cache:restore-section-html-batch")
+    .sort((a, b) => b.durationMs - a.durationMs)
+    .slice(0, 10);
+
+  if (slowestCacheRestoreBatches.length > 0) {
+    console.table(
+      slowestCacheRestoreBatches.map((entry) => ({
+        durationMs: entry.durationMs,
+        detail: entry.detail ?? "",
+      })),
+    );
+  }
   console.groupEnd();
 }
 
@@ -359,7 +389,14 @@ function ReaderPage() {
         const cached = await measureAsync(
           recordTiming,
           "reader:cache-load-total",
-          () => loadRawBook(bookId, recordTiming),
+          () =>
+            loadRawBook(bookId, recordTiming, (done, total, message) => {
+              if (!cancelled) {
+                setExtractionProgress(
+                  message ?? `Loading cached book... ${done} / ${total}`,
+                );
+              }
+            }),
           { detail: bookId },
         );
         if (cached) {

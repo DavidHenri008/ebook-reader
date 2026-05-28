@@ -10,6 +10,32 @@ import {
 
 const META_STORE = "extracted-books-raw" as const;
 const SECTIONS_STORE = "extracted-sections" as const;
+const RESTORE_BATCH_SIZE = 8;
+
+type CacheLoadProgress = (
+  done: number,
+  total: number,
+  message?: string,
+) => void;
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KiB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MiB`;
+}
+
+function reportCacheProgress(
+  onProgress: CacheLoadProgress | undefined,
+  done: number,
+  total: number,
+): void {
+  if (!onProgress || (done !== 0 && done !== total && done % 8 !== 0)) return;
+  onProgress(done, total, `Loading cached book... ${done} / ${total} sections`);
+}
+
+function yieldToBrowser(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 0));
+}
 
 /**
  * Save a raw extracted book to the cache.
@@ -65,6 +91,7 @@ export async function saveRawBook(
 export async function loadRawBook(
   bookId: string,
   onTiming?: BookTimingReporter,
+  onProgress?: CacheLoadProgress,
 ): Promise<RawExtractedBook | null> {
   const db = await measureAsync(onTiming, "cache:open-db", () => getDb());
   const meta = await measureAsync(
@@ -86,11 +113,71 @@ export async function loadRawBook(
   reportTiming(onTiming, "cache:sort-sections", sortStartedAt, {
     detail: `${sorted.length} sections`,
   });
+  const totalHtmlBytes = sorted.reduce(
+    (total, section) => total + section.html.size,
+    0,
+  );
+  let restoredCount = 0;
+  reportCacheProgress(onProgress, restoredCount, sorted.length);
   const htmlStrings = await measureAsync(
     onTiming,
     "cache:restore-section-html",
-    () => Promise.all(sorted.map((section) => section.html.text())),
-    { detail: `${sorted.length} blob sections` },
+    async () => {
+      const restoredHtml = new Array<string>(sorted.length);
+
+      for (let start = 0; start < sorted.length; start += RESTORE_BATCH_SIZE) {
+        const batch = sorted.slice(start, start + RESTORE_BATCH_SIZE);
+        const batchStartedAt = getTimestamp();
+        const batchBytes = batch.reduce(
+          (total, section) => total + section.html.size,
+          0,
+        );
+
+        try {
+          const batchHtml = await Promise.all(
+            batch.map(async (section) => {
+              const restoreStartedAt = getTimestamp();
+              try {
+                return await section.html.text();
+              } finally {
+                restoredCount++;
+                reportTiming(
+                  onTiming,
+                  "cache:restore-section-html-item",
+                  restoreStartedAt,
+                  {
+                    sectionIndex: section.index,
+                    href: section.href,
+                    detail: formatBytes(section.html.size),
+                  },
+                );
+                reportCacheProgress(onProgress, restoredCount, sorted.length);
+              }
+            }),
+          );
+
+          batchHtml.forEach((html, offset) => {
+            restoredHtml[start + offset] = html;
+          });
+        } finally {
+          reportTiming(
+            onTiming,
+            "cache:restore-section-html-batch",
+            batchStartedAt,
+            {
+              detail: `${start + 1}-${start + batch.length} of ${sorted.length}, ${formatBytes(batchBytes)}`,
+            },
+          );
+        }
+
+        await yieldToBrowser();
+      }
+
+      return restoredHtml;
+    },
+    {
+      detail: `${sorted.length} blob sections, ${formatBytes(totalHtmlBytes)}`,
+    },
   );
   const sections: RawSection[] = sorted.map((section, i) => ({
     index: section.index,
