@@ -1,12 +1,5 @@
 import { getDb } from "./db";
 import type { RawExtractedBook, RawSection } from "../types/bookPages";
-import type { BookTimingReporter } from "../types/performance";
-import {
-  getTimestamp,
-  measureAsync,
-  measureSync,
-  reportTiming,
-} from "../utils/timing";
 
 const META_STORE = "extracted-books-raw" as const;
 const SECTIONS_STORE = "extracted-sections" as const;
@@ -17,12 +10,6 @@ type CacheLoadProgress = (
   total: number,
   message?: string,
 ) => void;
-
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KiB`;
-  return `${(bytes / 1024 / 1024).toFixed(1)} MiB`;
-}
 
 function reportCacheProgress(
   onProgress: CacheLoadProgress | undefined,
@@ -44,25 +31,17 @@ function yieldToBrowser(): Promise<void> {
  */
 export async function saveRawBook(
   book: RawExtractedBook,
-  onTiming?: BookTimingReporter,
 ): Promise<void> {
-  const storedSections = measureSync(
-    onTiming,
-    "cache:prepare-sections",
-    () =>
-      book.sections.map((section) => ({
-        bookId: book.bookId,
-        index: section.index,
-        href: section.href,
-        html: new Blob([section.html], { type: "text/html;charset=utf-8" }),
-        textLength: section.textLength,
-        viewport: section.viewport,
-      })),
-    { detail: `${book.sections.length} sections, blob html` },
-  );
+  const storedSections = book.sections.map((section) => ({
+    bookId: book.bookId,
+    index: section.index,
+    href: section.href,
+    html: new Blob([section.html], { type: "text/html;charset=utf-8" }),
+    textLength: section.textLength,
+    viewport: section.viewport,
+  }));
 
-  const db = await measureAsync(onTiming, "cache:open-db", () => getDb());
-  const writeStartedAt = getTimestamp();
+  const db = await getDb();
   const tx = db.transaction([META_STORE, SECTIONS_STORE], "readwrite");
 
   tx.objectStore(META_STORE).put({
@@ -76,13 +55,7 @@ export async function saveRawBook(
     tx.objectStore(SECTIONS_STORE).put(section);
   }
 
-  try {
-    await tx.done;
-  } finally {
-    reportTiming(onTiming, "cache:write-indexeddb", writeStartedAt, {
-      detail: `${book.sections.length} sections`,
-    });
-  }
+  await tx.done;
 }
 
 /**
@@ -90,95 +63,32 @@ export async function saveRawBook(
  */
 export async function loadRawBook(
   bookId: string,
-  onTiming?: BookTimingReporter,
   onProgress?: CacheLoadProgress,
 ): Promise<RawExtractedBook | null> {
-  const db = await measureAsync(onTiming, "cache:open-db", () => getDb());
-  const meta = await measureAsync(
-    onTiming,
-    "cache:read-meta",
-    () => db.get(META_STORE, bookId),
-    { detail: bookId },
-  );
+  const db = await getDb();
+  const meta = await db.get(META_STORE, bookId);
   if (!meta) return null;
 
-  const stored = await measureAsync(
-    onTiming,
-    "cache:read-sections",
-    () => db.getAllFromIndex(SECTIONS_STORE, "byBook", bookId),
-    { detail: bookId },
-  );
-  const sortStartedAt = getTimestamp();
+  const stored = await db.getAllFromIndex(SECTIONS_STORE, "byBook", bookId);
   const sorted = stored.sort((a, b) => a.index - b.index);
-  reportTiming(onTiming, "cache:sort-sections", sortStartedAt, {
-    detail: `${sorted.length} sections`,
-  });
-  const totalHtmlBytes = sorted.reduce(
-    (total, section) => total + section.html.size,
-    0,
-  );
   let restoredCount = 0;
   reportCacheProgress(onProgress, restoredCount, sorted.length);
-  const htmlStrings = await measureAsync(
-    onTiming,
-    "cache:restore-section-html",
-    async () => {
-      const restoredHtml = new Array<string>(sorted.length);
+  const htmlStrings = new Array<string>(sorted.length);
 
-      for (let start = 0; start < sorted.length; start += RESTORE_BATCH_SIZE) {
-        const batch = sorted.slice(start, start + RESTORE_BATCH_SIZE);
-        const batchStartedAt = getTimestamp();
-        const batchBytes = batch.reduce(
-          (total, section) => total + section.html.size,
-          0,
-        );
+  for (let start = 0; start < sorted.length; start += RESTORE_BATCH_SIZE) {
+    const batch = sorted.slice(start, start + RESTORE_BATCH_SIZE);
+    const batchHtml = await Promise.all(
+      batch.map((section) => section.html.text()),
+    );
 
-        try {
-          const batchHtml = await Promise.all(
-            batch.map(async (section) => {
-              const restoreStartedAt = getTimestamp();
-              try {
-                return await section.html.text();
-              } finally {
-                restoredCount++;
-                reportTiming(
-                  onTiming,
-                  "cache:restore-section-html-item",
-                  restoreStartedAt,
-                  {
-                    sectionIndex: section.index,
-                    href: section.href,
-                    detail: formatBytes(section.html.size),
-                  },
-                );
-                reportCacheProgress(onProgress, restoredCount, sorted.length);
-              }
-            }),
-          );
+    batchHtml.forEach((html, offset) => {
+      htmlStrings[start + offset] = html;
+    });
+    restoredCount += batch.length;
+    reportCacheProgress(onProgress, restoredCount, sorted.length);
+    await yieldToBrowser();
+  }
 
-          batchHtml.forEach((html, offset) => {
-            restoredHtml[start + offset] = html;
-          });
-        } finally {
-          reportTiming(
-            onTiming,
-            "cache:restore-section-html-batch",
-            batchStartedAt,
-            {
-              detail: `${start + 1}-${start + batch.length} of ${sorted.length}, ${formatBytes(batchBytes)}`,
-            },
-          );
-        }
-
-        await yieldToBrowser();
-      }
-
-      return restoredHtml;
-    },
-    {
-      detail: `${sorted.length} blob sections, ${formatBytes(totalHtmlBytes)}`,
-    },
-  );
   const sections: RawSection[] = sorted.map((section, i) => ({
     index: section.index,
     href: section.href,

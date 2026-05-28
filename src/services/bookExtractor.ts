@@ -1,14 +1,7 @@
 import ePub from "epubjs";
 import type { RawSection, RawExtractedBook } from "../types/bookPages";
 import type { TocItem } from "../types/epub";
-import type { BookTimingReporter } from "../types/performance";
 import { getPlainTextLength } from "./pageEstimation";
-import {
-  getTimestamp,
-  measureAsync,
-  measureSync,
-  reportTiming,
-} from "../utils/timing";
 
 type NavItem = {
   id: string;
@@ -295,9 +288,7 @@ export async function extractRawBook(
   bookId: string,
   onProgress?: (done: number, total: number, message?: string) => void,
   signal?: AbortSignal,
-  onTiming?: BookTimingReporter,
 ): Promise<RawExtractedBook> {
-  const extractionStartedAt = getTimestamp();
   throwIfAborted(signal);
   await reportProgress(onProgress, 0, 0, "Loading EPUB parser...");
   throwIfAborted(signal);
@@ -305,47 +296,30 @@ export async function extractRawBook(
   await reportProgress(onProgress, 0, 0, "Opening book...");
   throwIfAborted(signal);
 
-  const book = measureSync(
-    onTiming,
-    "extract:create-parser",
-    () => createBook(fileData, { replacements: "base64" }),
-    { detail: `${fileData.byteLength} bytes` },
-  );
+  const book = createBook(fileData, { replacements: "base64" });
 
   try {
-    await measureAsync(onTiming, "extract:parser-ready", () => book.ready);
+    await book.ready;
     throwIfAborted(signal);
 
     await reportProgress(onProgress, 0, 0, "Reading book resources...");
     throwIfAborted(signal);
 
-    await measureAsync(
-      onTiming,
-      "extract:resources",
-      () => book.loaded.resources,
-    );
+    await book.loaded.resources;
     throwIfAborted(signal);
 
     const resources = book.resources;
-    const navPromise = measureAsync(
-      onTiming,
-      "extract:navigation",
-      async () => {
-        await book.loaded.navigation;
-        return mapTocItems(book.navigation?.toc ?? []);
-      },
-    ).catch(() => [] as TocItem[]);
+    const navPromise = book.loaded.navigation
+      .then(() => mapTocItems(book.navigation?.toc ?? []))
+      .catch(() => [] as TocItem[]);
 
     const assetCache = new Map<string, string>();
     async function inlineAssets(
       html: string,
       sectionUrl: string,
-      sectionIndex: number,
-      href: string,
     ): Promise<string> {
       if (!resources) return html;
 
-      const scanStartedAt = getTimestamp();
       const relUrls = resources.relativeTo(sectionUrl);
       const references = collectAssetReferences(html);
       const needed: Array<{ relUrl: string; absUrl: string }> = [];
@@ -357,57 +331,30 @@ export async function extractRawBook(
           });
         }
       });
-      reportTiming(onTiming, "section:asset-scan", scanStartedAt, {
-        sectionIndex,
-        href,
-        detail: `${needed.length} matches from ${references.size} references and ${relUrls.length} resources`,
-      });
 
       if (needed.length === 0) return html;
 
       const uncached = needed.filter(({ absUrl }) => !assetCache.has(absUrl));
-      await measureAsync(
-        onTiming,
-        "section:asset-load",
-        async () => {
-          await Promise.all(
-            uncached.map(async ({ absUrl }) => {
-              try {
-                assetCache.set(absUrl, await resources.createUrl(absUrl));
-              } catch {
-                // Ignore broken assets and keep the section readable.
-              }
-            }),
-          );
-        },
-        {
-          sectionIndex,
-          href,
-          detail: `${uncached.length} uncached of ${needed.length} referenced`,
-        },
+      await Promise.all(
+        uncached.map(async ({ absUrl }) => {
+          try {
+            assetCache.set(absUrl, await resources.createUrl(absUrl));
+          } catch {
+            // Ignore broken assets and keep the section readable.
+          }
+        }),
       );
 
-      return measureSync(
-        onTiming,
-        "section:asset-replace",
-        () => {
-          let result = html;
-          for (const { relUrl, absUrl } of needed) {
-            const dataUri = assetCache.get(absUrl);
-            if (dataUri) result = result.split(relUrl).join(dataUri);
-          }
-          return result;
-        },
-        { sectionIndex, href, detail: `${needed.length} referenced assets` },
-      );
+      let result = html;
+      for (const { relUrl, absUrl } of needed) {
+        const dataUri = assetCache.get(absUrl);
+        if (dataUri) result = result.split(relUrl).join(dataUri);
+      }
+      return result;
     }
 
     const spineItems: SpineItem[] = [];
-    const spineStartedAt = getTimestamp();
     book.spine.each((item) => spineItems.push(item));
-    reportTiming(onTiming, "extract:spine-list", spineStartedAt, {
-      detail: `${spineItems.length} sections`,
-    });
     await reportProgress(onProgress, 0, spineItems.length);
 
     const sections: RawSection[] = new Array(spineItems.length);
@@ -416,7 +363,6 @@ export async function extractRawBook(
     for (let index = 0; index < spineItems.length; index++) {
       throwIfAborted(signal);
       const item = spineItems[index];
-      const sectionStartedAt = getTimestamp();
       await reportProgress(
         onProgress,
         index + 1,
@@ -426,27 +372,13 @@ export async function extractRawBook(
       throwIfAborted(signal);
 
       try {
-        let html = await measureAsync(
-          onTiming,
-          "section:render",
-          () => item.render(loadFn),
-          { sectionIndex: item.index, href: item.href },
-        );
+        let html = await item.render(loadFn);
         throwIfAborted(signal);
 
-        html = await inlineAssets(html, item.url, item.index, item.href);
+        html = await inlineAssets(html, item.url);
         throwIfAborted(signal);
 
-        const textLength = measureSync(
-          onTiming,
-          "section:text-length",
-          () => getPlainTextLength(html),
-          {
-            sectionIndex: item.index,
-            href: item.href,
-            detail: `${html.length} html chars`,
-          },
-        );
+        const textLength = getPlainTextLength(html);
 
         sections[index] = {
           index: item.index,
@@ -456,19 +388,7 @@ export async function extractRawBook(
           viewport: extractViewport(html),
         };
       } finally {
-        const unloadStartedAt = getTimestamp();
-        try {
-          item.unload();
-        } finally {
-          reportTiming(onTiming, "section:unload", unloadStartedAt, {
-            sectionIndex: item.index,
-            href: item.href,
-          });
-          reportTiming(onTiming, "section:total", sectionStartedAt, {
-            sectionIndex: item.index,
-            href: item.href,
-          });
-        }
+        item.unload();
       }
     }
 
@@ -484,15 +404,7 @@ export async function extractRawBook(
 
     return { bookId, sections, toc, extractedAt: Date.now() };
   } finally {
-    const destroyStartedAt = getTimestamp();
-    try {
-      book.destroy();
-    } finally {
-      reportTiming(onTiming, "extract:destroy", destroyStartedAt);
-      reportTiming(onTiming, "extract:total", extractionStartedAt, {
-        detail: bookId,
-      });
-    }
+    book.destroy();
   }
 }
 

@@ -5,4 +5,3 @@ export * from "./epub";
 export * from "./library";
 export * from "./storage";
 export * from "./bookPages";
-export * from "./performance";
