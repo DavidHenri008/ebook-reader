@@ -11,12 +11,14 @@ export function isReadableTextNode(node: Text): boolean {
 /**
  * Walk text nodes inside `root` and return the char offset of the first
  * text node whose bounding rect is at least partially inside
- * [viewTop, viewBottom] in viewport coords.
+ * [viewTop, viewBottom] and [viewLeft, viewRight] in viewport coords.
  */
 export function getTopmostVisibleAnchor(
   root: Element,
   viewTop: number,
   viewBottom: number,
+  viewLeft = Number.NEGATIVE_INFINITY,
+  viewRight = Number.POSITIVE_INFINITY,
 ): number {
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
   let charOffset = 0;
@@ -30,7 +32,13 @@ export function getTopmostVisibleAnchor(
       const rects = range.getClientRects();
       for (let i = 0; i < rects.length; i++) {
         const r = rects[i];
-        if (r.width > 0 && r.bottom > viewTop && r.top < viewBottom) {
+        if (
+          r.width > 0 &&
+          r.bottom > viewTop &&
+          r.top < viewBottom &&
+          r.right > viewLeft &&
+          r.left < viewRight
+        ) {
           return charOffset;
         }
       }

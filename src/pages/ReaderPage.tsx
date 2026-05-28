@@ -9,7 +9,13 @@ import {
 } from "../storage";
 import { saveRawBook, loadRawBook } from "../storage/bookCache";
 import { extractRawBook, sectionIndexForHref } from "../services/bookExtractor";
-import { estimateCharsPerPage } from "../services/pageEstimation";
+import {
+  getEstimatedPagePosition,
+  getMeasuredPagePosition,
+  measurePageMap,
+  type MeasuredPageMap,
+  type PageViewport,
+} from "../services/pageEstimation";
 import type { TocItem, ReadingState, ReadingMode, Theme } from "../types";
 import type { RawExtractedBook } from "../types/bookPages";
 
@@ -239,6 +245,13 @@ function ReaderPage() {
   const [theme, setTheme] = useState<Theme>(
     () => (localStorage.getItem("app-theme") as Theme | null) ?? "light",
   );
+  const [viewerViewport, setViewerViewport] = useState<PageViewport | null>(
+    null,
+  );
+  const [measuredPages, setMeasuredPages] = useState<{
+    bookId: string | null;
+    pageMap: MeasuredPageMap;
+  } | null>(null);
   const [extractionProgress, setExtractionProgress] = useState<string | null>(
     null,
   );
@@ -248,34 +261,35 @@ function ReaderPage() {
     [extractedBook],
   );
 
-  const estimatedPosition = useMemo(() => {
-    const sectionCount = sectionTextLengths.length;
-    if (sectionCount === 0) {
-      return { sectionNumber: 1, page: 1, total: 1 };
+  const activePageMap = useMemo(() => {
+    if (!measuredPages || !viewerViewport) return null;
+    const { pageMap } = measuredPages;
+
+    if (measuredPages.bookId !== bookId) return null;
+    if (pageMap.zoom !== zoom) return null;
+    if (pageMap.pageCounts.length !== sectionTextLengths.length) return null;
+    if (
+      Math.abs(pageMap.viewport.width - viewerViewport.width) >= 0.5 ||
+      Math.abs(pageMap.viewport.height - viewerViewport.height) >= 0.5
+    ) {
+      return null;
     }
 
-    const charsPerPage = estimateCharsPerPage(zoom);
-    const pageCounts = sectionTextLengths.map((textLength) =>
-      Math.max(1, Math.ceil(textLength / charsPerPage)),
-    );
-    const safeSection = clampSectionIndex(currentSection, sectionCount);
-    const previousPages = pageCounts
-      .slice(0, safeSection)
-      .reduce((sum, count) => sum + count, 0);
-    const textLength = sectionTextLengths[safeSection] ?? 0;
-    const safeAnchor = Math.min(normalizeAnchor(anchor), textLength);
-    const pageInSection = Math.min(
-      pageCounts[safeSection] ?? 1,
-      Math.floor(safeAnchor / charsPerPage) + 1,
-    );
-    const total = pageCounts.reduce((sum, count) => sum + count, 0);
+    return pageMap;
+  }, [bookId, measuredPages, sectionTextLengths.length, viewerViewport, zoom]);
 
-    return {
-      sectionNumber: safeSection + 1,
-      page: previousPages + pageInSection,
-      total,
-    };
-  }, [anchor, currentSection, sectionTextLengths, zoom]);
+  const pagePosition = useMemo(
+    () =>
+      activePageMap
+        ? getMeasuredPagePosition(activePageMap, currentSection, anchor)
+        : getEstimatedPagePosition(
+            sectionTextLengths,
+            currentSection,
+            anchor,
+            zoom,
+          ),
+    [activePageMap, anchor, currentSection, sectionTextLengths, zoom],
+  );
 
   // Load reading state
   useEffect(() => {
@@ -308,6 +322,35 @@ function ReaderPage() {
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
   }, [theme]);
+
+  useEffect(() => {
+    if (!extractedBook || !viewerViewport) {
+      return;
+    }
+
+    let cancelled = false;
+    const controller = new AbortController();
+
+    measurePageMap(
+      extractedBook.sections,
+      zoom,
+      viewerViewport,
+      theme,
+      controller.signal,
+    )
+      .then((nextPageMap) => {
+        if (!cancelled) setMeasuredPages({ bookId, pageMap: nextPageMap });
+      })
+      .catch((error: unknown) => {
+        if (controller.signal.aborted) return;
+        console.warn("Failed to measure page map:", error);
+      });
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [bookId, extractedBook, theme, viewerViewport, zoom]);
 
   // Extract book when file is available
   useEffect(() => {
@@ -403,6 +446,20 @@ function ReaderPage() {
   // Track section navigation (section-boundary crossing, scrolled sentinels)
   const handleSectionNavigate = useCallback((sectionIndex: number) => {
     setCurrentSection(normalizeSectionIndex(sectionIndex));
+  }, []);
+
+  const handleViewportChange = useCallback((viewport: PageViewport) => {
+    setViewerViewport((previous) => {
+      if (
+        previous &&
+        Math.abs(previous.width - viewport.width) < 0.5 &&
+        Math.abs(previous.height - viewport.height) < 0.5
+      ) {
+        return previous;
+      }
+
+      return viewport;
+    });
   }, []);
 
   const handleNavigate = useCallback(
@@ -577,7 +634,9 @@ function ReaderPage() {
           </TocContent>
           <PositionText>
             <PositionLabel>Position</PositionLabel>
-            Page {estimatedPosition.page} of {estimatedPosition.total}
+            {pagePosition.estimated ? "~Page" : "Page"} {pagePosition.page} of{" "}
+            {pagePosition.estimated ? "~" : ""}
+            {pagePosition.total}
           </PositionText>
         </Sidebar>
 
@@ -591,6 +650,7 @@ function ReaderPage() {
           theme={theme}
           onPositionChange={handlePositionChange}
           onNavigate={handleSectionNavigate}
+          onViewportChange={handleViewportChange}
         />
       </Container>
     </Root>

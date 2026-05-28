@@ -6,6 +6,7 @@
 import { useRef, useEffect, useCallback, useState } from "react";
 import type { RawSection } from "../../types/bookPages";
 import type { Theme } from "../../types/storage";
+import type { PageViewport } from "../../services/pageEstimation";
 import {
   scheduleIdle,
   getTopmostVisibleAnchor,
@@ -38,6 +39,7 @@ export interface SectionViewerProps {
   theme: Theme;
   onPositionChange: (pos: { sectionIndex: number; anchor: number }) => void;
   onNavigate?: (sectionIndex: number) => void;
+  onViewportChange?: (viewport: PageViewport) => void;
 }
 
 export interface UseSectionViewerResult {
@@ -58,6 +60,7 @@ export function useSectionViewer({
   theme,
   onPositionChange,
   onNavigate,
+  onViewportChange,
 }: SectionViewerProps): UseSectionViewerResult {
   // ── DOM refs ────────────────────────────────────────────────────────────
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -91,6 +94,7 @@ export function useSectionViewer({
     width: number;
     height: number;
   } | null>(null);
+  const reportedViewportRef = useRef<PageViewport | null>(null);
 
   // ── Scrolled-mode range tracking ────────────────────────────────────────
   const mountedRangeRef = useRef({
@@ -120,6 +124,32 @@ export function useSectionViewer({
   useEffect(() => {
     onPositionChangeRef.current = onPositionChange;
   }, [onPositionChange]);
+
+  const onViewportChangeRef = useRef(onViewportChange);
+  useEffect(() => {
+    onViewportChangeRef.current = onViewportChange;
+  }, [onViewportChange]);
+
+  const reportViewport = useCallback(() => {
+    const wrapper = wrapperRef.current;
+    if (!wrapper) return;
+
+    const rect = wrapper.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return;
+
+    const previous = reportedViewportRef.current;
+    if (
+      previous &&
+      Math.abs(previous.width - rect.width) < 0.5 &&
+      Math.abs(previous.height - rect.height) < 0.5
+    ) {
+      return;
+    }
+
+    const next = { width: rect.width, height: rect.height };
+    reportedViewportRef.current = next;
+    onViewportChangeRef.current?.(next);
+  }, []);
 
   // ── Atomic state helpers ────────────────────────────────────────────────
 
@@ -162,16 +192,31 @@ export function useSectionViewer({
 
   // ── Anchor save / restore ────────────────────────────────────────────────
 
-  const saveAnchor = useCallback(() => {
+  const readVisiblePosition = useCallback((): {
+    sectionIndex: number;
+    anchor: number;
+  } | null => {
     const wrapper = wrapperRef.current;
-    if (!wrapper) return;
+    if (!wrapper) return null;
     const contentRoot =
       modeRef.current === "paginated" ? colsRef.current : flowRef.current;
-    if (!contentRoot) return;
+    if (!contentRoot) return null;
+
+    if (
+      modeRef.current === "scrolled" &&
+      mountedRangeRef.current.first === 0 &&
+      wrapper.scrollTop <= 2
+    ) {
+      return { sectionIndex: 0, anchor: 0 };
+    }
 
     const rect = wrapper.getBoundingClientRect();
     let anchorRoot: Element = contentRoot;
     let sectionIndex = sectionRef.current;
+
+    if (modeRef.current === "paginated" && pageRef.current === 0) {
+      return { sectionIndex, anchor: 0 };
+    }
 
     if (modeRef.current === "scrolled") {
       const visibleSection = getTopmostVisibleSection(
@@ -179,9 +224,10 @@ export function useSectionViewer({
         rect.top,
         rect.bottom,
       );
-      if (visibleSection) {
+      const visibleSectionIndex = Number(visibleSection?.dataset.sectionIndex);
+      if (visibleSection && Number.isFinite(visibleSectionIndex)) {
         anchorRoot = visibleSection;
-        sectionIndex = Number(visibleSection.dataset.sectionIndex);
+        sectionIndex = visibleSectionIndex;
       }
     }
 
@@ -189,7 +235,18 @@ export function useSectionViewer({
       anchorRoot,
       rect.top,
       rect.bottom,
+      modeRef.current === "paginated" ? rect.left : undefined,
+      modeRef.current === "paginated" ? rect.right : undefined,
     );
+
+    return { sectionIndex, anchor: newAnchor };
+  }, []);
+
+  const saveAnchor = useCallback(() => {
+    const position = readVisiblePosition();
+    if (!position) return;
+
+    const { sectionIndex, anchor: newAnchor } = position;
     anchorRef.current = newAnchor;
 
     if (modeRef.current === "scrolled" && sectionIndex !== sectionRef.current) {
@@ -199,9 +256,27 @@ export function useSectionViewer({
 
     idleHandleRef.current?.cancel();
     idleHandleRef.current = scheduleIdle(() => {
-      onPositionChangeRef.current({ sectionIndex, anchor: newAnchor });
+      onPositionChangeRef.current(position);
     });
-  }, []);
+  }, [readVisiblePosition]);
+
+  const flushAnchor = useCallback(() => {
+    const position = readVisiblePosition();
+    if (!position) return;
+
+    anchorRef.current = position.anchor;
+    if (
+      modeRef.current === "scrolled" &&
+      position.sectionIndex !== sectionRef.current
+    ) {
+      sectionRef.current = position.sectionIndex;
+      onNavigateRef.current?.(position.sectionIndex);
+    }
+
+    idleHandleRef.current?.cancel();
+    idleHandleRef.current = null;
+    onPositionChangeRef.current(position);
+  }, [readVisiblePosition]);
 
   // Stable ref so IntersectionObserver callbacks always call the latest version
   const saveAnchorRef = useRef(saveAnchor);
@@ -215,11 +290,35 @@ export function useSectionViewer({
       targetMode: "paginated" | "scrolled",
       targetZoom: number,
     ) => {
-      if (targetAnchor <= 0) return;
-
       const contentRoot =
         targetMode === "paginated" ? colsRef.current : flowRef.current;
       if (!contentRoot) return;
+
+      if (targetAnchor <= 0) {
+        if (targetMode === "paginated") {
+          const cols = colsRef.current;
+          if (cols) {
+            applyPage(0);
+            cols.style.transform = "translateX(0)";
+          }
+        } else {
+          const targetSection = getMountedScrolledSection(
+            contentRoot,
+            sectionRef.current,
+          );
+          if (sectionRef.current === 0) {
+            wrapperRef.current?.scrollTo({ top: 0, behavior: "instant" });
+          } else if (targetSection) {
+            targetSection.scrollIntoView({
+              block: "start",
+              behavior: "instant" as ScrollBehavior,
+            });
+          } else {
+            wrapperRef.current?.scrollTo({ top: 0, behavior: "instant" });
+          }
+        }
+        return;
+      }
 
       const searchRoot =
         targetMode === "scrolled"
@@ -330,7 +429,8 @@ export function useSectionViewer({
 
   // ── Scrolled render + helpers ────────────────────────────────────────────
 
-  const teardownScrolled = useCallback(() => {
+  const teardownScrolled = useCallback((flushPosition = false) => {
+    if (flushPosition) flushAnchor();
     intersectObserverRef.current?.disconnect();
     intersectObserverRef.current = null;
     topSentinelRef.current = null;
@@ -342,7 +442,7 @@ export function useSectionViewer({
       first: sectionRef.current,
       last: sectionRef.current,
     };
-  }, []);
+  }, [flushAnchor]);
 
   const mountPreviousScrolledSection = useCallback((): boolean => {
     const range = mountedRangeRef.current;
@@ -537,7 +637,7 @@ export function useSectionViewer({
     } else if (sectionRef.current < sections.length - 1) {
       const next = sectionRef.current + 1;
       sectionRef.current = next;
-      renderPaginated(next, zoomRef.current, 0);
+      renderPaginated(next, zoomRef.current, 0).then(() => saveAnchor());
       onNavigateRef.current?.(next);
     }
   }, [applyPage, saveAnchor, renderPaginated, sections.length]);
@@ -590,6 +690,8 @@ export function useSectionViewer({
     const themeChanged = themeRef.current !== theme;
     const modeChanged = modeRef.current !== mode;
 
+    const positionBeforeModeChange = modeChanged ? readVisiblePosition() : null;
+
     if (!sectionChanged && !zoomChanged && !themeChanged && !modeChanged) {
       if (mode === "scrolled" && flowRef.current?.childElementCount === 0) {
         renderScrolled(currentSection);
@@ -598,7 +700,18 @@ export function useSectionViewer({
       return;
     }
 
-    sectionRef.current = currentSection;
+    const targetSection =
+      positionBeforeModeChange?.sectionIndex ?? currentSection;
+    const targetAnchor = positionBeforeModeChange?.anchor ?? anchorRef.current;
+
+    if (positionBeforeModeChange) {
+      anchorRef.current = positionBeforeModeChange.anchor;
+      idleHandleRef.current?.cancel();
+      idleHandleRef.current = null;
+      onPositionChangeRef.current(positionBeforeModeChange);
+    }
+
+    sectionRef.current = targetSection;
     zoomRef.current = zoom;
     themeRef.current = theme;
     modeRef.current = mode;
@@ -610,16 +723,16 @@ export function useSectionViewer({
     if (modeChanged) {
       if (mode === "paginated") {
         teardownScrolled();
-        renderPaginated(currentSection, zoom, 0).then(() => {
+        renderPaginated(targetSection, zoom, 0).then(() => {
           requestAnimationFrame(() =>
-            restoreAnchor(anchorRef.current, mode, zoom),
+            restoreAnchor(targetAnchor, mode, zoom),
           );
         });
       } else {
         teardownScrolled();
-        renderScrolled(currentSection);
+        renderScrolled(targetSection);
         requestAnimationFrame(() =>
-          restoreAnchor(anchorRef.current, mode, zoom),
+          restoreAnchor(targetAnchor, mode, zoom),
         );
       }
       return;
@@ -658,6 +771,7 @@ export function useSectionViewer({
     theme,
     mode,
     anchor,
+    readVisiblePosition,
     renderPaginated,
     renderScrolled,
     teardownScrolled,
@@ -669,7 +783,7 @@ export function useSectionViewer({
   useEffect(() => {
     return () => {
       mountedRef.current = false;
-      teardownScrolled();
+      teardownScrolled(true);
       resizeObserverRef.current?.disconnect();
       resizeObserverRef.current = null;
     };
@@ -681,8 +795,11 @@ export function useSectionViewer({
     const wrapper = wrapperRef.current;
     if (!wrapper) return;
 
+    reportViewport();
+
     let debounce: ReturnType<typeof setTimeout> | null = null;
     const ro = new ResizeObserver(() => {
+      reportViewport();
       if (debounce) clearTimeout(debounce);
       debounce = setTimeout(() => {
         if (modeRef.current === "paginated") {
@@ -719,7 +836,7 @@ export function useSectionViewer({
       resizeObserverRef.current = null;
       if (debounce) clearTimeout(debounce);
     };
-  }, [renderPaginated, restoreAnchor]);
+  }, [renderPaginated, restoreAnchor, reportViewport]);
 
   // ── Scroll → save anchor (scrolled mode) ─────────────────────────────────
 

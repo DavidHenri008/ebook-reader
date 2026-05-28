@@ -21,7 +21,8 @@ export async function saveReadingState(
   state: Partial<ReadingState>,
 ): Promise<void> {
   const db = await getDb();
-  const existing = await db.get(STORE_NAME, bookId);
+  const tx = db.transaction(STORE_NAME, "readwrite");
+  const existing = await tx.store.get(bookId);
 
   const storedState: StoredReadingState = {
     ...defaultReadingState,
@@ -31,7 +32,8 @@ export async function saveReadingState(
     updatedAt: Date.now(),
   };
 
-  await db.put(STORE_NAME, storedState);
+  await tx.store.put(storedState);
+  await tx.done;
 }
 
 /**
