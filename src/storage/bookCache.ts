@@ -1,5 +1,9 @@
-import { getDb } from "./db";
+import { getDb, type EpubReaderDB } from "./db";
 import type { RawExtractedBook, RawSection } from "../types/bookPages";
+import {
+  containsBrowserBlobUrl,
+  getFirstBrowserBlobUrl,
+} from "../utils/htmlReferences";
 
 const META_STORE = "extracted-books-raw" as const;
 const SECTIONS_STORE = "extracted-sections" as const;
@@ -24,12 +28,39 @@ function yieldToBrowser(): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, 0));
 }
 
+async function deleteRawBookRecords(
+  db: EpubReaderDB,
+  bookId: string,
+): Promise<void> {
+  const sectionKeys = await db.getAllKeysFromIndex(
+    SECTIONS_STORE,
+    "byBook",
+    bookId,
+  );
+
+  const tx = db.transaction([META_STORE, SECTIONS_STORE], "readwrite");
+  tx.objectStore(META_STORE).delete(bookId);
+  for (const key of sectionKeys) {
+    tx.objectStore(SECTIONS_STORE).delete(key);
+  }
+  await tx.done;
+}
+
 /**
  * Save a raw extracted book to the cache.
  * Each section is stored as an individual record so the structured-clone
  * step never needs to hold the entire book in memory at once.
  */
 export async function saveRawBook(book: RawExtractedBook): Promise<void> {
+  const invalidSection = book.sections.find((section) =>
+    containsBrowserBlobUrl(section.html),
+  );
+  if (invalidSection) {
+    throw new Error(
+      `Refusing to cache extracted book ${book.bookId}: section ${invalidSection.index} contains a temporary browser blob URL (${getFirstBrowserBlobUrl(invalidSection.html)}).`,
+    );
+  }
+
   const storedSections = book.sections.map((section) => ({
     bookId: book.bookId,
     index: section.index,
@@ -69,9 +100,15 @@ export async function loadRawBook(
 
   const stored = await db.getAllFromIndex(SECTIONS_STORE, "byBook", bookId);
   const sorted = stored.sort((a, b) => a.index - b.index);
+  if (sorted.length !== meta.sectionCount) {
+    await deleteRawBookRecords(db, bookId);
+    return null;
+  }
+
   let restoredCount = 0;
   reportCacheProgress(onProgress, restoredCount, sorted.length);
   const htmlStrings = new Array<string>(sorted.length);
+  let hasTemporaryBlobUrl = false;
 
   for (let start = 0; start < sorted.length; start += RESTORE_BATCH_SIZE) {
     const batch = sorted.slice(start, start + RESTORE_BATCH_SIZE);
@@ -81,10 +118,18 @@ export async function loadRawBook(
 
     batchHtml.forEach((html, offset) => {
       htmlStrings[start + offset] = html;
+      if (containsBrowserBlobUrl(html)) {
+        hasTemporaryBlobUrl = true;
+      }
     });
     restoredCount += batch.length;
     reportCacheProgress(onProgress, restoredCount, sorted.length);
     await yieldToBrowser();
+  }
+
+  if (hasTemporaryBlobUrl) {
+    await deleteRawBookRecords(db, bookId);
+    return null;
   }
 
   const sections: RawSection[] = sorted.map((section, i) => ({
@@ -108,19 +153,7 @@ export async function loadRawBook(
  */
 export async function deleteRawBook(bookId: string): Promise<void> {
   const db = await getDb();
-  // Collect section primary keys first (read), then delete in a write tx.
-  const sectionKeys = await db.getAllKeysFromIndex(
-    SECTIONS_STORE,
-    "byBook",
-    bookId,
-  );
-
-  const tx = db.transaction([META_STORE, SECTIONS_STORE], "readwrite");
-  tx.objectStore(META_STORE).delete(bookId);
-  for (const key of sectionKeys) {
-    tx.objectStore(SECTIONS_STORE).delete(key);
-  }
-  await tx.done;
+  await deleteRawBookRecords(db, bookId);
 }
 
 /**

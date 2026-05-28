@@ -2,6 +2,7 @@ import ePub from "epubjs";
 import type { RawSection, RawExtractedBook } from "../types/bookPages";
 import type { TocItem } from "../types/epub";
 import { getPlainTextLength } from "./pageEstimation";
+import { getFirstBrowserBlobUrl } from "../utils/htmlReferences";
 
 type NavItem = {
   id: string;
@@ -21,10 +22,13 @@ interface SpineItem {
 type ResourceCollection = {
   urls: string[];
   relativeTo: (url: string) => string[];
-  createUrl: (url: string) => Promise<string>;
+  replaceCss?: () => Promise<unknown>;
   settings: {
+    archive?: {
+      getBase64: (url: string, mimeType?: string) => Promise<string> | undefined;
+    };
     resolver: (href: string) => string;
-    replacements: EpubReplacementMode;
+    request: (href: string, type?: string) => Promise<unknown>;
   };
 };
 
@@ -35,7 +39,10 @@ type EpubBook = {
     navigation: Promise<unknown>;
   };
   resources?: ResourceCollection;
-  spine: { each: (callback: (item: SpineItem) => void) => void };
+  spine: {
+    each: (callback: (item: SpineItem) => void) => void;
+    hooks?: { serialize?: { clear: () => void } };
+  };
   load: (path: string) => Promise<unknown>;
   navigation?: { toc?: NavItem[] };
   destroy: () => void;
@@ -43,10 +50,8 @@ type EpubBook = {
 
 type EpubFactory = (
   fileData: ArrayBuffer,
-  options: { replacements: EpubReplacementMode },
+  options: { replacements: "none" },
 ) => EpubBook;
-
-type EpubReplacementMode = "base64" | "blobUrl" | "none";
 
 const createBook = ePub as unknown as EpubFactory;
 const ASSET_ATTRIBUTE_NAMES = [
@@ -276,8 +281,43 @@ function throwIfAborted(signal?: AbortSignal): void {
   }
 }
 
+function disableEpubJsResourceSubstitution(book: EpubBook): void {
+  if (book.resources) {
+    book.resources.replaceCss = () => Promise.resolve();
+  }
+  book.spine.hooks?.serialize?.clear();
+}
+
 function yieldToBrowser(): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.addEventListener("load", () => {
+      if (typeof reader.result === "string") {
+        resolve(reader.result);
+      } else {
+        reject(new Error("Failed to read EPUB asset as a data URL."));
+      }
+    });
+    reader.addEventListener("error", () => {
+      reject(reader.error ?? new Error("Failed to read EPUB asset."));
+    });
+    reader.readAsDataURL(blob);
+  });
+}
+
+async function resourceToDataUrl(
+  resources: ResourceCollection,
+  absUrl: string,
+): Promise<string | null> {
+  const archivedDataUrl = resources.settings.archive?.getBase64(absUrl);
+  if (archivedDataUrl) return archivedDataUrl;
+
+  const asset = await resources.settings.request(absUrl, "blob");
+  return asset instanceof Blob ? blobToDataUrl(asset) : null;
 }
 
 async function reportProgress(
@@ -308,24 +348,23 @@ export async function extractRawBook(
   const book = createBook(fileData, { replacements: "none" });
 
   try {
-    await book.ready;
-    throwIfAborted(signal);
-
     await reportProgress(onProgress, 0, 0, "Reading book resources...");
     throwIfAborted(signal);
 
     await book.loaded.resources;
     throwIfAborted(signal);
+    disableEpubJsResourceSubstitution(book);
+
+    await book.ready;
+    throwIfAborted(signal);
 
     const resources = book.resources;
-    if (resources) {
-      resources.settings.replacements = "base64";
-    }
     const navPromise = book.loaded.navigation
       .then(() => mapTocItems(book.navigation?.toc ?? []))
       .catch(() => [] as TocItem[]);
 
     const assetCache = new Map<string, string>();
+
     async function inlineAssets(
       html: string,
       sectionUrl: string,
@@ -350,7 +389,8 @@ export async function extractRawBook(
       await Promise.all(
         uncached.map(async ({ absUrl }) => {
           try {
-            assetCache.set(absUrl, await resources.createUrl(absUrl));
+            const dataUrl = await resourceToDataUrl(resources, absUrl);
+            if (dataUrl) assetCache.set(absUrl, dataUrl);
           } catch {
             // Ignore broken assets and keep the section readable.
           }
@@ -397,6 +437,13 @@ export async function extractRawBook(
 
         html = await inlineAssets(html, item.url);
         throwIfAborted(signal);
+
+        const temporaryBlobUrl = getFirstBrowserBlobUrl(html);
+        if (temporaryBlobUrl) {
+          throw new Error(
+            `Extracted section ${sectionNumber} still contains a temporary browser blob URL (${temporaryBlobUrl}).`,
+          );
+        }
 
         const textLength = getPlainTextLength(html);
         const viewport = extractViewport(html);
