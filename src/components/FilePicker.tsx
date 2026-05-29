@@ -1,6 +1,7 @@
 import { useRef, type ChangeEvent } from "react";
 import styled from "@emotion/styled";
 import { keyframes } from "@emotion/react";
+import { Button } from "./ui";
 
 //#region Styled Components
 const spin = keyframes`
@@ -9,38 +10,6 @@ const spin = keyframes`
 
 const HiddenInput = styled.input`
   display: none;
-`;
-
-const PickerButton = styled.button`
-  height: 2.5rem;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.75rem 1.5rem;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  background-color: var(--accent-bg);
-  color: var(--accent);
-  cursor: pointer;
-  font-size: 1rem;
-  font-weight: 500;
-  transition:
-    border-color 0.2s,
-    opacity 0.2s;
-
-  &:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-  }
-
-  &:hover:not(:disabled) {
-    border-color: var(--accent-border);
-  }
-
-  &:focus-visible {
-    outline: 2px solid var(--accent);
-    outline-offset: 2px;
-  }
 `;
 
 const Spinner = styled.span`
@@ -93,10 +62,15 @@ function FilePicker({
         multiple
         onChange={handleChange}
       />
-      <PickerButton type="button" onClick={handleClick} disabled={disabled}>
+      <Button
+        type="button"
+        $variant="filled"
+        onClick={handleClick}
+        disabled={disabled}
+      >
         {disabled && <Spinner aria-hidden="true" />}
         {label}
-      </PickerButton>
+      </Button>
     </>
   );
 }

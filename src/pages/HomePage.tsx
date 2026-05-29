@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import styled from "@emotion/styled";
 import { useNavigate } from "react-router-dom";
-import { BookCard, FilePicker } from "../components";
+import { BookCard, FilePicker, Button, IconButton } from "../components";
 import {
   getAllBooks,
   addBookToLibrary,
@@ -41,40 +41,6 @@ const HeaderActions = styled.div`
   gap: 0.75rem;
 `;
 
-const ClearCachedBooksButton = styled.button`
-  height: 2.5rem;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.75rem 1rem;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  background-color: var(--bg);
-  color: var(--text);
-  cursor: pointer;
-  font-size: 1rem;
-  font-weight: 500;
-  transition:
-    border-color 0.2s,
-    color 0.2s,
-    opacity 0.2s;
-
-  &:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-  }
-
-  &:hover:not(:disabled) {
-    border-color: var(--accent-border);
-    color: var(--accent);
-  }
-
-  &:focus-visible {
-    outline: 2px solid var(--accent);
-    outline-offset: 2px;
-  }
-`;
-
 const LibraryGrid = styled.div`
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
@@ -108,33 +74,6 @@ const LoadingText = styled.div`
   text-align: center;
   padding: 4rem;
   color: var(--text);
-`;
-
-const ThemeButton = styled.button`
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 2.5rem;
-  height: 2.5rem;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  background-color: var(--bg);
-  color: var(--text);
-  cursor: pointer;
-  font-size: 1.2rem;
-  transition:
-    border-color 0.2s,
-    color 0.2s;
-
-  &:hover {
-    border-color: var(--accent-border);
-    color: var(--accent);
-  }
-
-  &:focus-visible {
-    outline: 2px solid var(--accent);
-    outline-offset: 2px;
-  }
 `;
 //#endregion
 
@@ -253,14 +192,14 @@ function HomePage() {
       <Header>
         <Title>My Library</Title>
         <HeaderActions>
-          <ClearCachedBooksButton
+          <Button
             type="button"
             onClick={handleClearCachedBooks}
             disabled={isClearingCache}
           >
             {isClearingCache ? "Clearing..." : "Clear cached books"}
-          </ClearCachedBooksButton>
-          <ThemeButton
+          </Button>
+          <IconButton
             aria-label="Toggle theme"
             title={
               theme === "light" ? "Switch to dark mode" : "Switch to light mode"
@@ -268,7 +207,7 @@ function HomePage() {
             onClick={toggleTheme}
           >
             {theme === "light" ? "☾" : "☀"}
-          </ThemeButton>
+          </IconButton>
           <FilePicker
             onFileSelect={handleFileSelect}
             label="+ Add Book"

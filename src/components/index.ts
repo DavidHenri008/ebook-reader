@@ -6,3 +6,5 @@ export { default as FilePicker } from "./FilePicker";
 export { default as SectionViewer } from "./sectionViewer/SectionViewer";
 export { ReaderToolbar } from "./reader/ReaderToolbar";
 export { ReaderSidebar } from "./reader/ReaderSidebar";
+export { Button, IconButton } from "./ui";
+export type { ButtonVariant } from "./ui";

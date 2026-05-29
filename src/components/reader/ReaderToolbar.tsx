@@ -49,6 +49,13 @@ const Button = styled.button`
   }
 `;
 
+const IconBtn = styled(Button)`
+  width: 2.25rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+`;
+
 const Zoom = styled.span`
   font-size: 16px;
   color: var(--text);
@@ -108,14 +115,14 @@ export function ReaderToolbar({
           <option value="scrolled">Scrolled</option>
           <option value="paginated">Paginated</option>
         </ModeSelect>
-        <Button onClick={onZoomOut} disabled={controlsDisabled}>
+        <IconBtn onClick={onZoomOut} disabled={controlsDisabled}>
           -
-        </Button>
+        </IconBtn>
         <Zoom>{zoom}%</Zoom>
-        <Button onClick={onZoomIn} disabled={controlsDisabled}>
+        <IconBtn onClick={onZoomIn} disabled={controlsDisabled}>
           +
-        </Button>
-        <Button
+        </IconBtn>
+        <IconBtn
           aria-label="Toggle theme"
           title={
             theme === "light" ? "Switch to dark mode" : "Switch to light mode"
@@ -123,7 +130,7 @@ export function ReaderToolbar({
           onClick={onToggleTheme}
         >
           {theme === "light" ? "☾" : "☀"}
-        </Button>
+        </IconBtn>
       </NavControls>
     </Toolbar>
   );
