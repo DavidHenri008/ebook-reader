@@ -4,10 +4,12 @@ import { getDb } from "./db";
 const STORE_NAME = "reading-state";
 export const THEME_STORAGE_KEY = "app-theme";
 
+/** Default color theme when none is stored in localStorage. */
+const DEFAULT_THEME: Theme = "dark";
+
 /** Default reading state for new books */
 const defaultReadingState: ReadingState = {
   lastLocation: undefined,
-  theme: "light",
   zoom: 100,
   mode: "paginated",
 };
@@ -18,16 +20,7 @@ function isTheme(value: string | null): value is Theme {
 
 export function getCurrentLibraryTheme(): Theme {
   const storedTheme = localStorage.getItem(THEME_STORAGE_KEY);
-  return isTheme(storedTheme) ? storedTheme : defaultReadingState.theme;
-}
-
-function getDefaultReadingState(
-  theme = getCurrentLibraryTheme(),
-): ReadingState {
-  return {
-    ...defaultReadingState,
-    theme,
-  };
+  return isTheme(storedTheme) ? storedTheme : DEFAULT_THEME;
 }
 
 /**
@@ -42,13 +35,11 @@ export async function saveReadingState(
   const db = await getDb();
   const tx = db.transaction(STORE_NAME, "readwrite");
   const existing = await tx.store.get(bookId);
-  const defaultState = getDefaultReadingState();
 
   const storedState: StoredReadingState = {
-    ...defaultState,
+    ...defaultReadingState,
     ...existing,
     ...state,
-    theme: state.theme ?? defaultState.theme,
     bookId,
     updatedAt: Date.now(),
   };
@@ -62,20 +53,16 @@ export async function saveReadingState(
  * @param bookId Unique identifier for the book
  * @returns Reading state or default state if not found
  */
-export async function loadReadingState(
-  bookId: string,
-  defaultTheme = getCurrentLibraryTheme(),
-): Promise<ReadingState> {
+export async function loadReadingState(bookId: string): Promise<ReadingState> {
   const db = await getDb();
   const state = await db.get(STORE_NAME, bookId);
 
   if (!state) {
-    return getDefaultReadingState(defaultTheme);
+    return { ...defaultReadingState };
   }
 
   return {
     lastLocation: state.lastLocation,
-    theme: defaultTheme,
     zoom: state.zoom ?? defaultReadingState.zoom,
     mode: state.mode ?? defaultReadingState.mode,
   };

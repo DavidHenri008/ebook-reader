@@ -7,8 +7,6 @@ export type ReadingMode = "paginated" | "scrolled";
 export interface ReadingState {
   /** Position within the book: section index + character-offset anchor */
   lastLocation?: { sectionIndex: number; anchor: number };
-  /** Color theme */
-  theme: Theme;
   /** Zoom level (percentage, e.g. 100 = 100%) */
   zoom: number;
   /** Reading layout mode */

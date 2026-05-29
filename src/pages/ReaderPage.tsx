@@ -351,12 +351,11 @@ function ReaderPage() {
   useEffect(() => {
     if (!bookId) return;
     let cancelled = false;
-    loadReadingState(bookId, libraryTheme).then((state) => {
+    loadReadingState(bookId).then((state) => {
       if (!cancelled) {
         setReadingState(state);
         setZoom(state.zoom);
         setMode(state.mode);
-        if (state.theme) setTheme(state.theme);
         if (state.lastLocation) {
           setCurrentSection(
             normalizeSectionIndex(state.lastLocation.sectionIndex),
@@ -368,7 +367,7 @@ function ReaderPage() {
     return () => {
       cancelled = true;
     };
-  }, [bookId, libraryTheme, setTheme]);
+  }, [bookId]);
 
   useEffect(() => {
     if (!extractedBook || !viewerViewport) {
@@ -486,10 +485,10 @@ function ReaderPage() {
       setCurrentSection(nextPosition.sectionIndex);
       setAnchor(nextPosition.anchor);
       if (bookId) {
-        saveReadingState(bookId, { lastLocation: nextPosition, theme });
+        saveReadingState(bookId, { lastLocation: nextPosition });
       }
     },
-    [bookId, theme],
+    [bookId],
   );
 
   // Track section navigation (section-boundary crossing, scrolled sentinels)
@@ -521,37 +520,33 @@ function ReaderPage() {
     () =>
       setZoom((z) => {
         const next = Math.min(z + 10, 400);
-        if (bookId) saveReadingState(bookId, { zoom: next, theme });
+        if (bookId) saveReadingState(bookId, { zoom: next });
         return next;
       }),
-    [bookId, theme],
+    [bookId],
   );
   const zoomOut = useCallback(
     () =>
       setZoom((z) => {
         const next = Math.max(z - 10, 20);
-        if (bookId) saveReadingState(bookId, { zoom: next, theme });
+        if (bookId) saveReadingState(bookId, { zoom: next });
         return next;
       }),
-    [bookId, theme],
+    [bookId],
   );
 
   const handleModeChange = useCallback(
     (e: React.ChangeEvent<HTMLSelectElement>) => {
       const newMode = e.target.value as ReadingMode;
       setMode(newMode);
-      if (bookId) saveReadingState(bookId, { mode: newMode, theme });
+      if (bookId) saveReadingState(bookId, { mode: newMode });
     },
-    [bookId, theme],
+    [bookId],
   );
 
   const toggleTheme = useCallback(() => {
-    setTheme((t) => {
-      const next: Theme = t === "light" ? "dark" : "light";
-      if (bookId) saveReadingState(bookId, { theme: next });
-      return next;
-    });
-  }, [bookId, setTheme]);
+    setTheme((t) => (t === "light" ? "dark" : "light"));
+  }, [setTheme]);
 
   const handleBackToLibrary = useCallback(() => {
     navigate("/");
