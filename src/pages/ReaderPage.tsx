@@ -1,7 +1,7 @@
 import { useEffect, useCallback, useMemo, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import styled from "@emotion/styled";
-import { SectionViewer } from "../components";
+import { SectionViewer, ReaderToolbar, ReaderSidebar } from "../components";
 import {
   saveReadingState,
   loadReadingState,
@@ -50,124 +50,6 @@ const Container = styled.div`
   overflow: hidden;
   flex: 1;
 `;
-const Toolbar = styled.div`
-  width: 100%;
-  display: flex;
-  align-items: center;
-  padding: 0.5rem 1rem;
-  border-bottom: 1px solid var(--border);
-  background-color: var(--bg);
-  z-index: 10;
-  justify-content: space-between;
-`;
-const Sidebar = styled.div`
-  border-right: 1px solid var(--border);
-  background-color: var(--bg);
-  padding: 0.75rem 0;
-  box-sizing: border-box;
-  display: flex;
-  flex-direction: column;
-  min-width: 200px;
-  max-width: 300px;
-  overflow: hidden;
-`;
-
-const SidebarTitle = styled.div`
-  padding: 0 1rem 0.5rem;
-  font-size: 0.7rem;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--text);
-  opacity: 0.6;
-`;
-
-const TocButton = styled.button<{ depth: number }>`
-  display: block;
-  width: 100%;
-  text-align: left;
-  padding: 0.35rem 1rem 0.35rem ${(p) => 1 + p.depth * 1}rem;
-  background: none;
-  border: none;
-  color: var(--text);
-  font-size: 0.85rem;
-  cursor: pointer;
-  line-height: 1.4;
-
-  &:hover {
-    background-color: var(--accent-bg);
-    color: var(--accent);
-  }
-`;
-
-const NavControls = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  justify-content: flex-end;
-`;
-
-const BookTitle = styled.span`
-  font-size: 16px;
-  color: var(--text);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 40%;
-`;
-
-const Button = styled.button`
-  border: none;
-  background-color: var(--bg);
-  color: var(--text);
-  cursor: pointer;
-  font-size: 20px;
-
-  &:hover {
-    background-color: var(--accent-bg);
-  }
-
-  &:disabled {
-    cursor: not-allowed;
-    opacity: 0.5;
-  }
-
-  &:disabled:hover {
-    background-color: var(--bg);
-  }
-`;
-
-const EmptySidebar = styled.div`
-  padding: 0 1rem;
-  font-size: 0.85rem;
-  color: var(--text);
-  opacity: 0.5;
-`;
-
-const TocContent = styled.div`
-  flex: 1;
-  overflow: auto;
-`;
-
-const Zoom = styled.span`
-  font-size: 16px;
-  color: var(--text);
-`;
-
-const ModeSelect = styled.select`
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  background-color: var(--bg);
-  color: var(--text);
-  cursor: pointer;
-  font-size: 14px;
-  padding: 0.25rem 0.5rem;
-
-  &:disabled {
-    cursor: not-allowed;
-    opacity: 0.5;
-  }
-`;
 
 const ProgressText = styled.div`
   font-size: 14px;
@@ -181,24 +63,6 @@ const ProgressBody = styled.div`
   justify-content: center;
   margin-top: 4rem;
 `;
-
-const PositionText = styled.div`
-  border-top: 1px solid var(--border);
-  color: var(--text);
-  font-size: 0.85rem;
-  line-height: 1.4;
-  margin-top: auto;
-  padding: 0.75rem 1rem 0;
-`;
-
-const PositionLabel = styled.div`
-  color: var(--text);
-  font-size: 0.7rem;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  opacity: 0.6;
-`;
 //#endregion
 
 interface LocationState {
@@ -206,35 +70,6 @@ interface LocationState {
   bookId?: string;
   bookTitle?: string;
   theme?: Theme;
-}
-
-function TocList({
-  items,
-  depth = 0,
-  onNavigate,
-}: {
-  items: TocItem[];
-  depth?: number;
-  onNavigate: (href: string) => void;
-}) {
-  return (
-    <>
-      {items.map((item) => (
-        <div key={item.id}>
-          <TocButton depth={depth} onClick={() => onNavigate(item.href)}>
-            {item.label}
-          </TocButton>
-          {item.subitems && (
-            <TocList
-              items={item.subitems}
-              depth={depth + 1}
-              onNavigate={onNavigate}
-            />
-          )}
-        </div>
-      ))}
-    </>
-  );
 }
 
 function ReaderPage() {
@@ -570,20 +405,12 @@ function ReaderPage() {
 
     body = (
       <Container>
-        <Sidebar>
-          <SidebarTitle>Contents</SidebarTitle>
-          <TocContent>
-            {toc.length > 0 ? (
-              <TocList items={toc} onNavigate={handleNavigate} />
-            ) : (
-              <EmptySidebar>No chapters found</EmptySidebar>
-            )}
-          </TocContent>
-          <PositionText>
-            <PositionLabel>Position</PositionLabel>
-            Page {pagePosition.page} of {pagePosition.total}
-          </PositionText>
-        </Sidebar>
+        <ReaderSidebar
+          toc={toc}
+          onNavigate={handleNavigate}
+          page={pagePosition.page}
+          total={pagePosition.total}
+        />
 
         <SectionViewer
           sections={extractedBook.sections}
@@ -603,37 +430,18 @@ function ReaderPage() {
 
   return (
     <Root>
-      <Toolbar>
-        <Button onClick={handleBackToLibrary}>← Library</Button>
-        <BookTitle title={bookTitle}>{bookTitle}</BookTitle>
-        <NavControls>
-          <ModeSelect
-            aria-label="Reading mode"
-            value={mode}
-            onChange={handleModeChange}
-            disabled={controlsDisabled}
-          >
-            <option value="scrolled">Scrolled</option>
-            <option value="paginated">Paginated</option>
-          </ModeSelect>
-          <Button onClick={zoomOut} disabled={controlsDisabled}>
-            -
-          </Button>
-          <Zoom>{zoom}%</Zoom>
-          <Button onClick={zoomIn} disabled={controlsDisabled}>
-            +
-          </Button>
-          <Button
-            aria-label="Toggle theme"
-            title={
-              theme === "light" ? "Switch to dark mode" : "Switch to light mode"
-            }
-            onClick={toggleTheme}
-          >
-            {theme === "light" ? "☾" : "☀"}
-          </Button>
-        </NavControls>
-      </Toolbar>
+      <ReaderToolbar
+        bookTitle={bookTitle}
+        mode={mode}
+        onModeChange={handleModeChange}
+        zoom={zoom}
+        onZoomIn={zoomIn}
+        onZoomOut={zoomOut}
+        theme={theme}
+        onToggleTheme={toggleTheme}
+        onBackToLibrary={handleBackToLibrary}
+        controlsDisabled={controlsDisabled}
+      />
       {body}
     </Root>
   );
