@@ -139,66 +139,6 @@ function addSrcsetReferences(references: Set<string>, rawValue: string): void {
   });
 }
 
-function isAttributeNameBoundary(char: string | undefined): boolean {
-  return !char || !/[A-Za-z0-9:_-]/.test(char);
-}
-
-function findAttributeValueEnd(html: string, cursor: number): number {
-  while (cursor < html.length && /[^\s>]/.test(html[cursor])) {
-    cursor++;
-  }
-  return cursor;
-}
-
-function collectAttributeReferences(
-  html: string,
-  references: Set<string>,
-  attributeName: string,
-): void {
-  let searchFrom = 0;
-
-  while (searchFrom < html.length) {
-    const attributeIndex = html.indexOf(attributeName, searchFrom);
-    if (attributeIndex === -1) return;
-
-    searchFrom = attributeIndex + attributeName.length;
-    if (!isAttributeNameBoundary(html[attributeIndex - 1])) continue;
-
-    let cursor = searchFrom;
-    while (cursor < html.length && /\s/.test(html[cursor])) cursor++;
-    if (html[cursor] !== "=") continue;
-
-    cursor++;
-    while (cursor < html.length && /\s/.test(html[cursor])) cursor++;
-
-    const quote = html[cursor];
-    if (quote === '"' || quote === "'") {
-      const valueStart = cursor + 1;
-      const valueEnd = html.indexOf(quote, valueStart);
-      if (valueEnd === -1) return;
-
-      const value = html.slice(valueStart, valueEnd);
-      if (attributeName === "srcset") {
-        addSrcsetReferences(references, value);
-      } else {
-        addAssetReference(references, value);
-      }
-
-      searchFrom = valueEnd + 1;
-      continue;
-    }
-
-    const valueEnd = findAttributeValueEnd(html, cursor);
-    const value = html.slice(cursor, valueEnd);
-    if (attributeName === "srcset") {
-      addSrcsetReferences(references, value);
-    } else {
-      addAssetReference(references, value);
-    }
-    searchFrom = valueEnd;
-  }
-}
-
 function collectStyleUrls(references: Set<string>, css: string): void {
   CSS_URL_PATTERN.lastIndex = 0;
   for (const match of css.matchAll(CSS_URL_PATTERN)) {
@@ -206,81 +146,35 @@ function collectStyleUrls(references: Set<string>, css: string): void {
   }
 }
 
-function collectStyleAttributeUrls(
-  html: string,
-  references: Set<string>,
-): void {
-  let searchFrom = 0;
-
-  while (searchFrom < html.length) {
-    const attributeIndex = html.indexOf("style", searchFrom);
-    if (attributeIndex === -1) return;
-
-    searchFrom = attributeIndex + "style".length;
-    if (!isAttributeNameBoundary(html[attributeIndex - 1])) continue;
-
-    let cursor = searchFrom;
-    while (cursor < html.length && /\s/.test(html[cursor])) cursor++;
-    if (html[cursor] !== "=") continue;
-
-    cursor++;
-    while (cursor < html.length && /\s/.test(html[cursor])) cursor++;
-
-    const quote = html[cursor];
-    if (quote === '"' || quote === "'") {
-      const valueStart = cursor + 1;
-      const valueEnd = html.indexOf(quote, valueStart);
-      if (valueEnd === -1) return;
-      collectStyleUrls(references, html.slice(valueStart, valueEnd));
-      searchFrom = valueEnd + 1;
-      continue;
-    }
-
-    const valueEnd = findAttributeValueEnd(html, cursor);
-    collectStyleUrls(references, html.slice(cursor, valueEnd));
-    searchFrom = valueEnd;
-  }
-}
-
-function collectStyleElementUrls(html: string, references: Set<string>): void {
-  let searchFrom = 0;
-
-  while (searchFrom < html.length) {
-    const openIndex = html.indexOf("<style", searchFrom);
-    if (openIndex === -1) return;
-
-    const contentStart = html.indexOf(">", openIndex + 6);
-    if (contentStart === -1) return;
-
-    const closeIndex = html.indexOf("</style", contentStart + 1);
-    if (closeIndex === -1) return;
-
-    collectStyleUrls(references, html.slice(contentStart + 1, closeIndex));
-    searchFrom = closeIndex + 8;
-  }
-}
-
 /**
  * Collect every local asset reference contained in a section's HTML.
  *
- * Exported for unit testing: this scanner is the behavior contract that any
- * future DOMParser-based rewrite (PLAN2 step C1) must preserve.
+ * Exported for unit testing. Uses a real `DOMParser` pass (the approach the
+ * project guidelines recommend and that `SectionViewer` already relies on) to
+ * read asset-bearing attributes, `srcset` candidates, inline `style`
+ * declarations, and `<style>` element text. The unit and integration tests pin
+ * the exact reference set this must produce (PLAN2 step C1).
  */
 export function collectAssetReferences(html: string): Set<string> {
   const references = new Set<string>();
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  const assetAttributeNames = new Set<string>(ASSET_ATTRIBUTE_NAMES);
 
-  for (const attributeName of ASSET_ATTRIBUTE_NAMES) {
-    collectAttributeReferences(html, references, attributeName);
-  }
+  for (const element of Array.from(doc.querySelectorAll("*"))) {
+    for (const attribute of Array.from(element.attributes)) {
+      const name = attribute.name.toLowerCase();
+      if (name === "srcset") {
+        addSrcsetReferences(references, attribute.value);
+      } else if (assetAttributeNames.has(name)) {
+        addAssetReference(references, attribute.value);
+      } else if (name === "style") {
+        collectStyleUrls(references, attribute.value);
+      }
+    }
 
-  if (
-    html.includes("url(") ||
-    html.includes("url (") ||
-    html.includes("URL(") ||
-    html.includes("URL (")
-  ) {
-    collectStyleAttributeUrls(html, references);
-    collectStyleElementUrls(html, references);
+    if (element.tagName.toLowerCase() === "style") {
+      collectStyleUrls(references, element.textContent ?? "");
+    }
   }
 
   return references;
