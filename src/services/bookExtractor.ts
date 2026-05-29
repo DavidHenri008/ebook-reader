@@ -260,7 +260,13 @@ function collectStyleElementUrls(html: string, references: Set<string>): void {
   }
 }
 
-function collectAssetReferences(html: string): Set<string> {
+/**
+ * Collect every local asset reference contained in a section's HTML.
+ *
+ * Exported for unit testing: this scanner is the behavior contract that any
+ * future DOMParser-based rewrite (PLAN2 step C1) must preserve.
+ */
+export function collectAssetReferences(html: string): Set<string> {
   const references = new Set<string>();
 
   for (const attributeName of ASSET_ATTRIBUTE_NAMES) {
