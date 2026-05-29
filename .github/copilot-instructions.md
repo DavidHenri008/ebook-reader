@@ -8,11 +8,15 @@ Keep EPUB content local. Do not introduce file uploads, server storage, cloud sy
 
 ## Architecture
 
-- `src/pages/ReaderPage.tsx` orchestrates extraction/cache loading, TOC navigation, theme, zoom, reading mode, current section, and reading position.
+- `src/pages/ReaderPage.tsx` is the page-level coordinator that wires reader hooks and components together (TOC navigation, theme, zoom, reading mode, current section, reading position).
+- `src/pages/reader/*` holds the reader orchestration hooks: `useBookExtraction` (cache-then-extract pipeline), `usePageMap` (measurement/invalidation), `useReaderPersistence` (reading-state saves), and `useReaderTheme`.
+- `src/components/reader/*` holds presentational reader UI (`ReaderToolbar`, `ReaderSidebar`, `TocList`).
 - `src/services/bookExtractor.ts` is the epubjs boundary. Keep epubjs adapter types and extraction-specific logic there when possible.
 - `src/services/pageEstimation.ts` owns text/page estimation behavior.
+- `src/reader/*` holds framework-agnostic reader primitives (`shadowHost.ts`, `anchor.ts`, `paginated.ts`) shared by both the `sectionViewer` component and the `pageEstimation` service. Keep `services` depending downward into `src/reader/*` rather than importing from `src/components/*`.
 - `src/storage/*` wraps IndexedDB-backed persistence for the library, raw book cache, and reading state.
 - `src/components/sectionViewer/*` owns Shadow DOM rendering, anchor tracking, and the scrolled/paginated viewing behavior. Prefer adding viewer-specific DOM logic there instead of growing `ReaderPage.tsx`.
+- `src/utils/*` holds small shared helpers (e.g. `htmlText.ts` `getPlainTextLength`, `readingLocation.ts` normalizers, `htmlReferences.ts`).
 - Shared data contracts live in `src/types/*`; keep service/component changes aligned with those types.
 
 ## Code Style
@@ -27,7 +31,7 @@ Keep changes focused and avoid broad rewrites unless the request requires them. 
 - Cache reload restores IndexedDB `Blob`s in batches of 8 with progress. Do not re-add performance timing instrumentation unless requested.
 - Off-screen page measurement must not set images to `loading="lazy"` when awaiting load/error; hidden lazy images can stall total page estimation.
 - `SectionViewer` should report wrapper viewport dimensions independently of paginated render completion so `ReaderPage` can start page estimation promptly.
-- When rewriting EPUB asset references, preserve src/srcset/href/poster/data/xlink references, CSS `url(...)` references, fragments, and `./` path variants.
+- When rewriting EPUB asset references, preserve src/srcset/href/poster/data/xlink references, CSS `url(...)` references, fragments, and `./` path variants. `collectAssetReferences` in `src/services/bookExtractor.ts` does this via a `DOMParser` pass; its exact output set is pinned by `bookExtractor.test.ts` (unit) and `bookExtractor.integration.test.ts` (real EPUB), so keep those green when changing it.
 
 ## Build And Validation
 
@@ -36,5 +40,6 @@ Use the npm scripts in `package.json`:
 - `npm run dev` starts the Vite dev server.
 - `npm run build` runs TypeScript project build and Vite production build.
 - `npm run lint` runs ESLint.
+- `npm test` runs the Vitest suite once; `npm run test:watch` runs it in watch mode.
 
-There is no dedicated test script at the moment, so do not report a test command as available unless one is added.
+Tests use Vitest + jsdom (config in `vitest.config.ts`). Do not run full `extractRawBook` in tests: epubjs spine rendering under jsdom times out regardless of book size. Integration tests instead unzip the fixture (`SMALL.epub`) with JSZip and run `collectAssetReferences` over the real section XHTML.

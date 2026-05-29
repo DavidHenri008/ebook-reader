@@ -1,73 +1,60 @@
-# React + TypeScript + Vite
+# EPUB Reader
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A local-first EPUB reader built with React, TypeScript, and Vite. Import EPUB
+files from your device, read them in scrolled or paginated mode, and keep your
+library and reading position entirely on your own machine.
 
-Currently, two official plugins are available:
+## Features
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- Import local `.epub` files — nothing is uploaded to a server.
+- Section, asset, and table-of-contents extraction via [epubjs](https://github.com/futurepress/epub.js).
+- Scrolled and paginated reading modes with zoom and light/dark themes.
+- Reading position is restored per book, including the current section and anchor.
+- Raw books are cached in IndexedDB so reopening is fast and works offline.
+- Installable PWA: the app shell is cached for offline use; your EPUB files are not.
 
-## React Compiler
+## Local-first by design
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+Books stay on the device. There is no file upload, server storage, cloud sync,
+or remote EPUB processing. The service worker caches only the application shell
+(JS, CSS, HTML, icons), never user EPUB content.
 
-## Expanding the ESLint configuration
+## Tech stack
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+- React 19 + TypeScript
+- Vite 8 with `@vitejs/plugin-react-swc` and `@swc/plugin-emotion`
+- Emotion for styling
+- React Router for navigation
+- `epubjs` for EPUB parsing/rendering
+- `idb` for IndexedDB-backed persistence
+- `vite-plugin-pwa` for the installable, offline app shell
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+## Getting started
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+Requires Node.js 20+ and npm.
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+npm install      # install dependencies
+npm run dev      # start the Vite dev server
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+Then open the printed local URL and import an EPUB to start reading.
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+## Scripts
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+- `npm run dev` — start the Vite dev server with HMR.
+- `npm run build` — type-check (`tsc -b`) and produce a production build.
+- `npm run preview` — preview the production build locally.
+- `npm run lint` — run ESLint.
+- `npm test` — run the Vitest suite once.
+- `npm run test:watch` — run Vitest in watch mode.
+
+## Project structure
+
+- `src/pages/` — route-level pages (`HomePage`, `ReaderPage`).
+- `src/components/` — UI components, including the `sectionViewer` reader engine.
+- `src/services/` — EPUB extraction, metadata, and page estimation.
+- `src/reader/` — framework-agnostic reader primitives (shadow host, anchors, pagination).
+- `src/storage/` — IndexedDB wrappers for the library, raw book cache, and reading state.
+- `src/types/` — shared data contracts.
+- `src/utils/` — small shared helpers.
