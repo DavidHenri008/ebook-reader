@@ -5,7 +5,7 @@ const STORE_NAME = "reading-state";
 export const THEME_STORAGE_KEY = "app-theme";
 
 /** Default reading state for new books */
-export const defaultReadingState: ReadingState = {
+const defaultReadingState: ReadingState = {
   lastLocation: undefined,
   theme: "light",
   zoom: 100,

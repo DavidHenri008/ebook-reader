@@ -44,7 +44,7 @@ export interface SectionViewerProps {
   onViewportChange?: (viewport: PageViewport) => void;
 }
 
-export interface UseSectionViewerResult {
+interface UseSectionViewerResult {
   wrapperRef: React.RefObject<HTMLDivElement | null>;
   hostRef: React.RefObject<HTMLDivElement | null>;
   pageInSection: number;

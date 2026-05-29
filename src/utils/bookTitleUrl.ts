@@ -8,7 +8,7 @@ function safeDecodeURIComponent(value: string): string {
   }
 }
 
-export function bookTitleToUrlSegment(title: string): string {
+function bookTitleToUrlSegment(title: string): string {
   const normalizedTitle = title.trim() || FALLBACK_BOOK_TITLE;
   return encodeURIComponent(normalizedTitle);
 }

@@ -3,7 +3,7 @@
  * plus a cross-browser idle scheduler.
  */
 
-export function isReadableTextNode(node: Text): boolean {
+function isReadableTextNode(node: Text): boolean {
   const parent = node.parentElement;
   return !parent?.closest("style,script,noscript,head,title,meta,link");
 }

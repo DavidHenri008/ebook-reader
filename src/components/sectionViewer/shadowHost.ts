@@ -4,7 +4,7 @@
 
 import type { Theme } from "../../types";
 
-export const THEME_CSS: Record<Theme, string> = {
+const THEME_CSS: Record<Theme, string> = {
   light:
     "--bg:#ffffff;--text:#6b6375;--text-heading:#08060d;--border:#e5e4e7;color-scheme:light;",
   dark: "--bg:#16171d;--text:#9ca3af;--text-heading:#f3f4f6;--border:#2e303a;color-scheme:dark;",

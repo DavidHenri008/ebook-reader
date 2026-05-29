@@ -11,7 +11,7 @@ import {
 } from "../components/sectionViewer/shadowHost";
 
 /** Baseline character count used to represent a single page at 100% zoom. */
-export const BASE_CHARS_PER_PAGE = 1800;
+const BASE_CHARS_PER_PAGE = 1800;
 
 export interface PageViewport {
   width: number;
@@ -53,7 +53,7 @@ export function getPlainTextLength(html: string): number {
  * @param zoom - Current zoom level as a percentage (e.g. 100 for 100%).
  * @returns Estimated character count per page, clamped to a minimum of 300.
  */
-export function estimateCharsPerPage(zoom: number): number {
+function estimateCharsPerPage(zoom: number): number {
   const zoomFactor = zoom / 100;
   return Math.max(300, Math.round(BASE_CHARS_PER_PAGE / zoomFactor ** 2));
 }

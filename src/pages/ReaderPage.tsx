@@ -23,8 +23,13 @@ import {
   type MeasuredPageMap,
   type PageViewport,
 } from "../services/pageEstimation";
-import type { TocItem, ReadingState, ReadingMode, Theme } from "../types";
-import type { RawExtractedBook } from "../types/bookPages";
+import type {
+  TocItem,
+  ReadingState,
+  ReadingMode,
+  Theme,
+  RawExtractedBook,
+} from "../types";
 
 //#region Styled Components
 const Root = styled.div`
