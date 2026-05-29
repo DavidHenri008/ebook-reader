@@ -30,7 +30,7 @@ const NavButton = styled.button`
   top: 50%;
   transform: translateY(-50%);
   z-index: 10;
-  background: rgba(0, 0, 0, 0.4);
+  background: var(--overlay);
   color: #fff;
   border: none;
   border-radius: 50%;
@@ -43,12 +43,12 @@ const NavButton = styled.button`
   justify-content: center;
   padding-bottom: 12px;
   &:hover {
-    background: rgba(0, 0, 0, 0.65);
+    background: var(--overlay-strong);
   }
   &:disabled {
     cursor: default;
     opacity: 0.35;
-    background: rgba(0, 0, 0, 0.25);
+    background: var(--overlay-weak);
   }
 `;
 

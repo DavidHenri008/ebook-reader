@@ -4,9 +4,24 @@ import type { BookMeta } from "../types";
 //#region Styled Components
 const Card = styled.div`
   position: relative;
+  width: 140px;
+
+  &:hover .action-btn,
+  &:focus-within .action-btn {
+    opacity: 1;
+  }
+`;
+
+const OpenButton = styled.button`
   display: flex;
   flex-direction: column;
-  width: 140px;
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: none;
+  text-align: left;
+  font: inherit;
+  color: inherit;
   cursor: pointer;
   transition: transform 0.2s;
 
@@ -14,8 +29,10 @@ const Card = styled.div`
     transform: translateY(-4px);
   }
 
-  &:hover .remove-btn {
-    opacity: 1;
+  &:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: 4px;
   }
 `;
 
@@ -65,6 +82,15 @@ const Author = styled.div`
   white-space: nowrap;
 `;
 
+const ActionOverlay = styled.div`
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 140px;
+  height: 200px;
+  pointer-events: none;
+`;
+
 const RemoveButton = styled.button`
   position: absolute;
   top: 4px;
@@ -73,18 +99,25 @@ const RemoveButton = styled.button`
   height: 24px;
   border: none;
   border-radius: 50%;
-  background-color: rgba(0, 0, 0, 0.6);
+  background-color: var(--overlay-strong);
   color: white;
   font-size: 14px;
   cursor: pointer;
   opacity: 0;
+  pointer-events: auto;
   transition: opacity 0.2s;
   display: flex;
   align-items: center;
   justify-content: center;
 
   &:hover {
-    background-color: rgba(220, 38, 38, 0.9);
+    background-color: var(--danger);
+  }
+
+  &:focus-visible {
+    opacity: 1;
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
   }
 `;
 
@@ -96,18 +129,25 @@ const ClearCacheButton = styled.button`
   height: 24px;
   border: none;
   border-radius: 50%;
-  background-color: rgba(0, 0, 0, 0.6);
+  background-color: var(--overlay-strong);
   color: white;
   font-size: 14px;
   cursor: pointer;
   opacity: 0;
+  pointer-events: auto;
   transition: opacity 0.2s;
   display: flex;
   align-items: center;
   justify-content: center;
 
   &:hover {
-    background-color: rgba(30, 100, 220, 0.9);
+    background-color: var(--info);
+  }
+
+  &:focus-visible {
+    opacity: 1;
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
   }
 `;
 //#endregion
@@ -139,32 +179,40 @@ function BookCard({ book, onClick, onRemove, onClearCache }: BookCardProps) {
   };
 
   return (
-    <Card onClick={() => onClick(book)}>
-      <CoverWrapper>
-        {book.coverUrl ? (
-          <Cover src={book.coverUrl} alt={book.title} />
-        ) : (
-          <PlaceholderCover>
-            {book.title.charAt(0).toUpperCase()}
-          </PlaceholderCover>
-        )}
+    <Card>
+      <OpenButton type="button" onClick={() => onClick(book)}>
+        <CoverWrapper>
+          {book.coverUrl ? (
+            <Cover src={book.coverUrl} alt={book.title} />
+          ) : (
+            <PlaceholderCover>
+              {book.title.charAt(0).toUpperCase()}
+            </PlaceholderCover>
+          )}
+        </CoverWrapper>
+        <Title title={book.title}>{book.title}</Title>
+        {book.author && <Author title={book.author}>{book.author}</Author>}
+      </OpenButton>
+      <ActionOverlay>
         <RemoveButton
-          className="remove-btn"
+          type="button"
+          className="action-btn"
           onClick={handleRemove}
+          aria-label={`Remove ${book.title} from library`}
           title="Remove from library"
         >
           X
         </RemoveButton>
         <ClearCacheButton
-          className="remove-btn"
+          type="button"
+          className="action-btn"
           onClick={handleClearCache}
+          aria-label={`Clear extraction cache for ${book.title}`}
           title="Clear extraction cache"
         >
           ↺
         </ClearCacheButton>
-      </CoverWrapper>
-      <Title title={book.title}>{book.title}</Title>
-      {book.author && <Author title={book.author}>{book.author}</Author>}
+      </ActionOverlay>
     </Card>
   );
 }
