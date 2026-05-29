@@ -4,6 +4,7 @@ import {
   containsBrowserBlobUrl,
   getFirstBrowserBlobUrl,
 } from "../utils/htmlReferences";
+import { yieldToBrowser } from "../utils/async";
 
 const META_STORE = "extracted-books-raw" as const;
 const SECTIONS_STORE = "extracted-sections" as const;
@@ -20,12 +21,9 @@ function reportCacheProgress(
   done: number,
   total: number,
 ): void {
-  if (!onProgress || (done !== 0 && done !== total && done % 8 !== 0)) return;
+  if (!onProgress || (done !== 0 && done !== total && done % RESTORE_BATCH_SIZE !== 0))
+    return;
   onProgress(done, total, `Loading cached book... ${done} / ${total} sections`);
-}
-
-function yieldToBrowser(): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, 0));
 }
 
 async function deleteRawBookRecords(

@@ -1,5 +1,9 @@
 import type { RawSection } from "../types/bookPages";
 import type { Theme } from "../types/storage";
+import {
+  clampSectionIndex,
+  normalizeAnchor,
+} from "../utils/readingLocation";
 import { getTopmostVisibleAnchor } from "../components/sectionViewer/anchor";
 import { getColDims } from "../components/sectionViewer/paginated";
 import {
@@ -58,23 +62,6 @@ function estimateCharsPerPage(zoom: number): number {
   return Math.max(300, Math.round(BASE_CHARS_PER_PAGE / zoomFactor ** 2));
 }
 
-function normalizeAnchor(value: number | undefined): number {
-  return typeof value === "number" && Number.isFinite(value)
-    ? Math.max(0, value)
-    : 0;
-}
-
-function normalizeSectionIndex(value: number | undefined): number {
-  return typeof value === "number" && Number.isFinite(value)
-    ? Math.max(0, Math.trunc(value))
-    : 0;
-}
-
-function clampSectionIndex(value: number, sectionCount: number): number {
-  if (sectionCount <= 0) return 0;
-  return Math.min(normalizeSectionIndex(value), sectionCount - 1);
-}
-
 function createMeasurementViewport(viewport: PageViewport): HTMLDivElement {
   const element = document.createElement("div");
   element.style.cssText = [
@@ -120,28 +107,32 @@ export function getEstimatedPagePosition(
   }
 
   const charsPerPage = estimateCharsPerPage(zoom);
-  const pageCounts = sectionTextLengths.map((textLength) =>
-    Math.max(1, Math.ceil(textLength / charsPerPage)),
-  );
   const safeSection = clampSectionIndex(currentSection, sectionCount);
-  const previousPages = pageCounts
-    .slice(0, safeSection)
-    .reduce((sum, count) => sum + count, 0);
-  const textLength = sectionTextLengths[safeSection] ?? 0;
-  const safeAnchor = Math.min(normalizeAnchor(anchor), textLength);
-  const pageInSection = Math.min(
-    pageCounts[safeSection] ?? 1,
-    Math.floor(safeAnchor / charsPerPage) + 1,
-  );
-  const total = Math.max(
-    1,
-    pageCounts.reduce((sum, count) => sum + count, 0),
-  );
+  let previousPages = 0;
+  let total = 0;
+  let pageInSection = 1;
+  for (let index = 0; index < sectionCount; index++) {
+    const pageCount = Math.max(
+      1,
+      Math.ceil(sectionTextLengths[index] / charsPerPage),
+    );
+    if (index < safeSection) {
+      previousPages += pageCount;
+    } else if (index === safeSection) {
+      const textLength = sectionTextLengths[safeSection] ?? 0;
+      const safeAnchor = Math.min(normalizeAnchor(anchor), textLength);
+      pageInSection = Math.min(
+        pageCount,
+        Math.floor(safeAnchor / charsPerPage) + 1,
+      );
+    }
+    total += pageCount;
+  }
 
   return {
     sectionNumber: safeSection + 1,
     page: previousPages + pageInSection,
-    total,
+    total: Math.max(1, total),
     estimated: true,
   };
 }

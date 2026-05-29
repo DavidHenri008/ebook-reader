@@ -3,6 +3,7 @@ import type { RawSection, RawExtractedBook } from "../types/bookPages";
 import type { TocItem } from "../types/epub";
 import { getPlainTextLength } from "./pageEstimation";
 import { getFirstBrowserBlobUrl } from "../utils/htmlReferences";
+import { yieldToBrowser } from "../utils/async";
 
 type NavItem = {
   id: string;
@@ -289,10 +290,6 @@ function disableEpubJsResourceSubstitution(book: EpubBook): void {
     book.resources.replaceCss = () => Promise.resolve();
   }
   book.spine.hooks?.serialize?.clear();
-}
-
-function yieldToBrowser(): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, 0));
 }
 
 function blobToDataUrl(blob: Blob): Promise<string> {

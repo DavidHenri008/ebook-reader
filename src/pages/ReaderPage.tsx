@@ -17,6 +17,12 @@ import {
   readerPathForBookTitle,
 } from "../utils/bookTitleUrl";
 import {
+  clampSectionIndex,
+  normalizeAnchor,
+  normalizeSectionIndex,
+} from "../utils/readingLocation";
+import { yieldToReaderPaint } from "../utils/async";
+import {
   getEstimatedPagePosition,
   getMeasuredPagePosition,
   measurePageMap,
@@ -199,29 +205,6 @@ interface LocationState {
   bookId?: string;
   bookTitle?: string;
   theme?: Theme;
-}
-
-function yieldToReaderPaint(): Promise<void> {
-  return new Promise((resolve) => {
-    requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
-  });
-}
-
-function normalizeAnchor(value: number | undefined): number {
-  return typeof value === "number" && Number.isFinite(value)
-    ? Math.max(0, value)
-    : 0;
-}
-
-function normalizeSectionIndex(value: number | undefined): number {
-  return typeof value === "number" && Number.isFinite(value)
-    ? Math.max(0, Math.trunc(value))
-    : 0;
-}
-
-function clampSectionIndex(value: number, sectionCount: number): number {
-  if (sectionCount <= 0) return 0;
-  return Math.min(normalizeSectionIndex(value), sectionCount - 1);
 }
 
 function TocList({
