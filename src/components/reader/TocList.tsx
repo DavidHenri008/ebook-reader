@@ -25,7 +25,7 @@ interface TocListProps {
   onNavigate: (href: string) => void;
 }
 
-export function TocList({ items, depth = 0, onNavigate }: TocListProps) {
+function TocList({ items, depth = 0, onNavigate }: TocListProps) {
   return (
     <>
       {items.map((item) => (
@@ -45,3 +45,5 @@ export function TocList({ items, depth = 0, onNavigate }: TocListProps) {
     </>
   );
 }
+
+export default TocList;

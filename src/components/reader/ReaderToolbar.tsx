@@ -89,7 +89,7 @@ interface ReaderToolbarProps {
   controlsDisabled: boolean;
 }
 
-export function ReaderToolbar({
+function ReaderToolbar({
   bookTitle,
   mode,
   onModeChange,
@@ -135,3 +135,5 @@ export function ReaderToolbar({
     </Toolbar>
   );
 }
+
+export default ReaderToolbar;

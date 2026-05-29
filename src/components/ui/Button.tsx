@@ -10,7 +10,7 @@ export type ButtonVariant = "filled" | "outlined";
  *
  * Both variants share sizing, focus-visible, and disabled handling.
  */
-export const Button = styled.button<{ $variant?: ButtonVariant }>`
+const Button = styled.button<{ $variant?: ButtonVariant }>`
   height: 2.5rem;
   display: inline-flex;
   align-items: center;
@@ -50,7 +50,7 @@ export const Button = styled.button<{ $variant?: ButtonVariant }>`
  * Square icon button primitive (e.g. theme toggle).
  * Matches {@link Button} sizing/focus behavior but is fixed-width and borderless of text.
  */
-export const IconButton = styled.button`
+const IconButton = styled.button`
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -61,17 +61,6 @@ export const IconButton = styled.button`
   background-color: var(--bg);
   color: var(--text);
   cursor: pointer;
-  font-size: 1.2rem;
-  transition:
-    border-color 0.2s,
-    color 0.2s,
-    opacity 0.2s;
-
-  &:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-  }
-
   &:hover:not(:disabled) {
     border-color: var(--accent-border);
     color: var(--accent);
@@ -82,3 +71,6 @@ export const IconButton = styled.button`
     outline-offset: 2px;
   }
 `;
+
+export default Button;
+export { IconButton };

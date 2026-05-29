@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import styled from "@emotion/styled";
-import { Button } from "./Button";
+import Button from "./Button";
 
 export type DialogKind = "confirm" | "alert";
 
@@ -58,7 +58,7 @@ interface DialogProps {
  * Presentational modal dialog. State and promise resolution are owned by
  * `useDialogs`; this component only renders and handles dismissal input.
  */
-export function Dialog({ state, onConfirm, onCancel }: DialogProps) {
+function Dialog({ state, onConfirm, onCancel }: DialogProps) {
   const confirmRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
@@ -103,3 +103,5 @@ export function Dialog({ state, onConfirm, onCancel }: DialogProps) {
     </Backdrop>
   );
 }
+
+export default Dialog;

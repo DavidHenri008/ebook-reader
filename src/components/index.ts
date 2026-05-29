@@ -4,7 +4,7 @@
 export { default as BookCard } from "./BookCard";
 export { default as FilePicker } from "./FilePicker";
 export { default as SectionViewer } from "./sectionViewer/SectionViewer";
-export { ReaderToolbar } from "./reader/ReaderToolbar";
-export { ReaderSidebar } from "./reader/ReaderSidebar";
+export { default as ReaderToolbar } from "./reader/ReaderToolbar";
+export { default as ReaderSidebar } from "./reader/ReaderSidebar";
 export { Button, IconButton } from "./ui";
 export type { ButtonVariant } from "./ui";

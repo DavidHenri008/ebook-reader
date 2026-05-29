@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from "react";
-import { Dialog, type DialogState } from "./Dialog";
+import Dialog, { type DialogState } from "./Dialog";
 
 interface ConfirmOptions {
   confirmLabel?: string;

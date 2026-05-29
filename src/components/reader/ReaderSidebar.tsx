@@ -1,6 +1,6 @@
 import styled from "@emotion/styled";
 import type { TocItem } from "../../types";
-import { TocList } from "./TocList";
+import TocList from "./TocList";
 
 const Sidebar = styled.div`
   border-right: 1px solid var(--border);
@@ -61,7 +61,7 @@ interface ReaderSidebarProps {
   total: number;
 }
 
-export function ReaderSidebar({
+function ReaderSidebar({
   toc,
   onNavigate,
   page,
@@ -84,3 +84,5 @@ export function ReaderSidebar({
     </Sidebar>
   );
 }
+
+export default ReaderSidebar;

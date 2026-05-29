@@ -69,6 +69,8 @@ const globalStyles = css`
  * Should be rendered once at the app root.
  * @returns Global styles component using Emotion's Global
  */
-export function GlobalStyles() {
+function GlobalStyles() {
   return <Global styles={globalStyles} />;
 }
+
+export default GlobalStyles;
