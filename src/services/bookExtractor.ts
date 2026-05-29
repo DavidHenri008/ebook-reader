@@ -4,6 +4,7 @@ import type { TocItem } from "../types/epub";
 import { getPlainTextLength } from "../utils/htmlText";
 import { getFirstBrowserBlobUrl } from "../utils/htmlReferences";
 import { yieldToBrowser } from "../utils/async";
+import { blobToDataUrl } from "../utils/blob";
 
 type NavItem = {
   id: string;
@@ -290,23 +291,6 @@ function disableEpubJsResourceSubstitution(book: EpubBook): void {
     book.resources.replaceCss = () => Promise.resolve();
   }
   book.spine.hooks?.serialize?.clear();
-}
-
-function blobToDataUrl(blob: Blob): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.addEventListener("load", () => {
-      if (typeof reader.result === "string") {
-        resolve(reader.result);
-      } else {
-        reject(new Error("Failed to read EPUB asset as a data URL."));
-      }
-    });
-    reader.addEventListener("error", () => {
-      reject(reader.error ?? new Error("Failed to read EPUB asset."));
-    });
-    reader.readAsDataURL(blob);
-  });
 }
 
 async function resourceToDataUrl(
