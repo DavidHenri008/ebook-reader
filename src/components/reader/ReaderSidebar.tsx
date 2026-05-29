@@ -61,12 +61,7 @@ interface ReaderSidebarProps {
   total: number;
 }
 
-function ReaderSidebar({
-  toc,
-  onNavigate,
-  page,
-  total,
-}: ReaderSidebarProps) {
+function ReaderSidebar({ toc, onNavigate, page, total }: ReaderSidebarProps) {
   return (
     <Sidebar>
       <SidebarTitle>Contents</SidebarTitle>
