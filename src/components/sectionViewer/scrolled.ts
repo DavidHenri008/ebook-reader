@@ -51,9 +51,7 @@ export function getMountedScrolledSection(
   root: Element,
   sectionIndex: number,
 ): HTMLElement | null {
-  return (
-    Array.from(root.querySelectorAll<HTMLElement>("[data-section-index]")).find(
-      (element) => Number(element.dataset.sectionIndex) === sectionIndex,
-    ) ?? null
+  return root.querySelector<HTMLElement>(
+    `[data-section-index="${CSS.escape(String(sectionIndex))}"]`,
   );
 }

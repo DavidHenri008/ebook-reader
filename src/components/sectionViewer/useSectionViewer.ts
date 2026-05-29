@@ -322,7 +322,11 @@ export function useSectionViewer({
     }
 
     const rect = wrapper.getBoundingClientRect();
-    const visible = readTopmostVisibleSection(contentRoot, rect.top, rect.bottom);
+    const visible = readTopmostVisibleSection(
+      contentRoot,
+      rect.top,
+      rect.bottom,
+    );
 
     if (visible && visible.index !== sectionRef.current) {
       sectionRef.current = visible.index;

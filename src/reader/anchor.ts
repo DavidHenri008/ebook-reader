@@ -81,19 +81,22 @@ export function getTopmostVisibleSection(
   let best: HTMLElement | null = null;
   let bestTop = Number.POSITIVE_INFINITY;
 
-  Array.from(
-    root.querySelectorAll<HTMLElement>("[data-section-index]"),
-  ).forEach((element) => {
+  for (const element of root.querySelectorAll<HTMLElement>(
+    "[data-section-index]",
+  )) {
     const rect = element.getBoundingClientRect();
-    if (rect.width === 0 && rect.height === 0) return;
-    if (rect.bottom <= viewTop || rect.top >= viewBottom) return;
+    if (rect.width === 0 && rect.height === 0) continue;
+    if (rect.bottom <= viewTop || rect.top >= viewBottom) continue;
 
     const visibleTop = Math.max(rect.top, viewTop);
     if (visibleTop < bestTop) {
       best = element;
       bestTop = visibleTop;
     }
-  });
+    // Document order: the first section reaching viewTop has the minimum
+    // possible visibleTop, so no later sibling can sit higher.
+    if (rect.top <= viewTop) break;
+  }
 
   return best;
 }
