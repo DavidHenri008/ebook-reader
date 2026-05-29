@@ -2,6 +2,12 @@
 
 import type { TocItem } from "./epub";
 
+/** Pixel dimensions of the reader viewport used for page measurement. */
+export interface PageViewport {
+  width: number;
+  height: number;
+}
+
 /** A section extracted from the EPUB, raw HTML only */
 export interface RawSection {
   /** Index in the spine */

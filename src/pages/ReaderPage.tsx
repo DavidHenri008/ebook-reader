@@ -27,7 +27,6 @@ import {
   getMeasuredPagePosition,
   measurePageMap,
   type MeasuredPageMap,
-  type PageViewport,
 } from "../services/pageEstimation";
 import type {
   TocItem,
@@ -35,6 +34,7 @@ import type {
   ReadingMode,
   Theme,
   RawExtractedBook,
+  PageViewport,
 } from "../types";
 
 //#region Styled Components

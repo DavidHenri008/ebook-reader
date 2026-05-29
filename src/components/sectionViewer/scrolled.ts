@@ -4,7 +4,7 @@
  */
 
 import type { RawSection } from "../../types";
-import { setSectionContent } from "./shadowHost";
+import { setSectionContent } from "../../reader/shadowHost";
 
 export function lookupSection(
   sections: RawSection[],

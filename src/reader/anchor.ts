@@ -1,6 +1,9 @@
 /**
  * Anchor utilities: text-walker helpers for finding and restoring read positions,
  * plus a cross-browser idle scheduler.
+ *
+ * Framework-agnostic reader primitives, shared by the section viewer component
+ * and the page-estimation service.
  */
 
 function isReadableTextNode(node: Text): boolean {

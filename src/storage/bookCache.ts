@@ -21,7 +21,10 @@ function reportCacheProgress(
   done: number,
   total: number,
 ): void {
-  if (!onProgress || (done !== 0 && done !== total && done % RESTORE_BATCH_SIZE !== 0))
+  if (
+    !onProgress ||
+    (done !== 0 && done !== total && done % RESTORE_BATCH_SIZE !== 0)
+  )
     return;
   onProgress(done, total, `Loading cached book... ${done} / ${total} sections`);
 }

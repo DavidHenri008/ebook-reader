@@ -1,5 +1,8 @@
 /**
  * Paginated-mode dimension calculations.
+ *
+ * Framework-agnostic reader primitives, shared by the section viewer component
+ * and the page-estimation service.
  */
 
 export interface ColDims {

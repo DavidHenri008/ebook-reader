@@ -1,7 +1,7 @@
 import ePub from "epubjs";
 import type { RawSection, RawExtractedBook } from "../types/bookPages";
 import type { TocItem } from "../types/epub";
-import { getPlainTextLength } from "./pageEstimation";
+import { getPlainTextLength } from "../utils/htmlText";
 import { getFirstBrowserBlobUrl } from "../utils/htmlReferences";
 import { yieldToBrowser } from "../utils/async";
 

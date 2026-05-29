@@ -1,26 +1,18 @@
-import type { RawSection } from "../types/bookPages";
+import type { RawSection, PageViewport } from "../types/bookPages";
 import type { Theme } from "../types/storage";
-import {
-  clampSectionIndex,
-  normalizeAnchor,
-} from "../utils/readingLocation";
-import { getTopmostVisibleAnchor } from "../components/sectionViewer/anchor";
-import { getColDims } from "../components/sectionViewer/paginated";
+import { clampSectionIndex, normalizeAnchor } from "../utils/readingLocation";
+import { getTopmostVisibleAnchor } from "../reader/anchor";
+import { getColDims } from "../reader/paginated";
 import {
   initShadowHost,
   measureLogicalContentHeight,
   nextAnimationFrame,
   setSectionContent,
   waitForContentLayout,
-} from "../components/sectionViewer/shadowHost";
+} from "../reader/shadowHost";
 
 /** Baseline character count used to represent a single page at 100% zoom. */
 const BASE_CHARS_PER_PAGE = 1800;
-
-export interface PageViewport {
-  width: number;
-  height: number;
-}
 
 export interface MeasuredPageMap {
   sectionPageStarts: number[][];
@@ -35,18 +27,6 @@ export interface PagePosition {
   page: number;
   total: number;
   estimated: boolean;
-}
-
-/**
- * Strips HTML tags from the given markup and returns the length of the
- * resulting plain text, with consecutive whitespace collapsed to a single space.
- *
- * @param html - Raw HTML string to measure.
- * @returns Number of characters in the visible text content.
- */
-export function getPlainTextLength(html: string): number {
-  const parsed = new DOMParser().parseFromString(html, "text/html");
-  return parsed.body.textContent?.replace(/\s+/g, " ").trim().length ?? 0;
 }
 
 /**

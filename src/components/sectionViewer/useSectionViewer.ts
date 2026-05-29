@@ -4,15 +4,14 @@
  */
 
 import { useRef, useEffect, useCallback, useState } from "react";
-import type { RawSection } from "../../types/bookPages";
+import type { RawSection, PageViewport } from "../../types/bookPages";
 import type { Theme } from "../../types/storage";
-import type { PageViewport } from "../../services/pageEstimation";
 import {
   scheduleIdle,
   getTopmostVisibleAnchor,
   findNodeAtOffset,
   getTopmostVisibleSection,
-} from "./anchor";
+} from "../../reader/anchor";
 import {
   buildHostStyle,
   setSectionContent,
@@ -20,14 +19,14 @@ import {
   measureLogicalContentHeight,
   nextAnimationFrame,
   initShadowHost,
-} from "./shadowHost";
+} from "../../reader/shadowHost";
 import {
   lookupSection,
   createScrolledSection,
   createScrolledSentinel,
   getMountedScrolledSection,
 } from "./scrolled";
-import { getColDims } from "./paginated";
+import { getColDims } from "../../reader/paginated";
 
 const SCROLLED_POSITION_SAVE_DELAY_MS = 160;
 

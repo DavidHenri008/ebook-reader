@@ -1,8 +1,11 @@
 /**
  * Shadow DOM initialisation, styling, and content-mounting helpers.
+ *
+ * Framework-agnostic reader primitives, shared by the section viewer component
+ * and the page-estimation service.
  */
 
-import type { Theme } from "../../types";
+import type { Theme } from "../types";
 
 const THEME_CSS: Record<Theme, string> = {
   light:
