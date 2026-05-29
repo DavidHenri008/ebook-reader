@@ -1,6 +1,8 @@
 import type { BookMeta, StoredBook } from "../types/library";
 import { extractEpubMetadata } from "../services/epubMetadata";
 import { getDb } from "./db";
+import { deleteRawBook } from "./bookCache";
+import { deleteReadingState } from "./readingState";
 
 const STORE_NAME = "library";
 
@@ -106,12 +108,14 @@ export async function updateLastOpened(id: string): Promise<void> {
 }
 
 /**
- * Remove a book from the library.
+ * Remove a book from the library, along with every reference to it in
+ * IndexedDB (cached extraction and saved reading state).
  * @param id - Book ID (hash)
  */
 export async function removeBookFromLibrary(id: string): Promise<void> {
   const db = await getDb();
   await db.delete(STORE_NAME, id);
+  await Promise.all([deleteRawBook(id), deleteReadingState(id)]);
 }
 
 /**

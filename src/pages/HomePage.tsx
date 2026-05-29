@@ -10,7 +10,10 @@ import {
   getBookFile,
   deleteRawBook,
   clearAllRawBooks,
+  hasRawBook,
+  saveRawBook,
 } from "../storage";
+import { extractRawBook } from "../services/bookExtractor";
 import { useAppTheme } from "../styles";
 import { readerPathForBookTitle } from "../utils/bookTitleUrl";
 import type { BookMeta } from "../types";
@@ -84,6 +87,9 @@ function HomePage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isAdding, setIsAdding] = useState(false);
   const [isClearingCache, setIsClearingCache] = useState(false);
+  const [extractingIds, setExtractingIds] = useState<Set<string>>(
+    () => new Set(),
+  );
   const [theme, setTheme] = useAppTheme();
   const { confirm, alert, dialog } = useDialogs();
 
@@ -121,6 +127,32 @@ function HomePage() {
           const toAdd = results.filter((b) => !existingIds.has(b.id));
           return toAdd.length > 0 ? sortByTitle([...prev, ...toAdd]) : prev;
         });
+
+        // Pre-extract each book into the cache so it opens instantly later.
+        // Runs in the background, sequentially (one at a time): parallel
+        // epubjs extraction of many books exhausts memory and crashes. We
+        // intentionally do not open the book.
+        void (async () => {
+          for (let index = 0; index < files.length; index++) {
+            const file = files[index];
+            const { id } = results[index];
+            if (await hasRawBook(id)) continue;
+            setExtractingIds((prev) => new Set(prev).add(id));
+            try {
+              const fileData = await file.arrayBuffer();
+              const extracted = await extractRawBook(fileData, id);
+              await saveRawBook(extracted);
+            } catch (error) {
+              console.warn(`Failed to pre-extract book ${id}:`, error);
+            } finally {
+              setExtractingIds((prev) => {
+                const next = new Set(prev);
+                next.delete(id);
+                return next;
+              });
+            }
+          }
+        })();
       } finally {
         setIsAdding(false);
       }
@@ -130,6 +162,7 @@ function HomePage() {
 
   const handleBookClick = useCallback(
     async (book: BookMeta) => {
+      if (extractingIds.has(book.id)) return;
       const file = await getBookFile(book.id);
       if (file) {
         navigate(readerPathForBookTitle(book.title), {
@@ -137,7 +170,7 @@ function HomePage() {
         });
       }
     },
-    [navigate, theme],
+    [navigate, theme, extractingIds],
   );
 
   const handleRemoveBook = useCallback(
@@ -238,6 +271,7 @@ function HomePage() {
               onClick={handleBookClick}
               onRemove={handleRemoveBook}
               onClearCache={handleClearCache}
+              isExtracting={extractingIds.has(book.id)}
             />
           ))}
         </LibraryGrid>

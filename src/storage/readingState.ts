@@ -67,3 +67,12 @@ export async function loadReadingState(bookId: string): Promise<ReadingState> {
     mode: state.mode ?? defaultReadingState.mode,
   };
 }
+
+/**
+ * Delete the stored reading state for a book.
+ * @param bookId Unique identifier for the book
+ */
+export async function deleteReadingState(bookId: string): Promise<void> {
+  const db = await getDb();
+  await db.delete(STORE_NAME, bookId);
+}

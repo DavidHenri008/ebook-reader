@@ -1,4 +1,5 @@
 import styled from "@emotion/styled";
+import { keyframes } from "@emotion/react";
 import type { BookMeta } from "../types";
 
 //#region Styled Components
@@ -33,6 +34,14 @@ const OpenButton = styled.button`
     outline: 2px solid var(--accent);
     outline-offset: 2px;
     border-radius: 4px;
+  }
+
+  &:disabled {
+    cursor: progress;
+  }
+
+  &:disabled:hover {
+    transform: none;
   }
 `;
 
@@ -131,6 +140,34 @@ const ClearCacheButton = styled(ActionButton)`
     background-color: var(--info);
   }
 `;
+
+const spin = keyframes`
+  to {
+    transform: rotate(360deg);
+  }
+`;
+
+const ExtractingOverlay = styled.div`
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  background-color: var(--overlay-strong);
+  color: white;
+  font-size: 0.75rem;
+`;
+
+const Spinner = styled.div`
+  width: 28px;
+  height: 28px;
+  border: 3px solid rgba(255, 255, 255, 0.3);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: ${spin} 0.8s linear infinite;
+`;
 //#endregion
 
 interface BookCardProps {
@@ -142,13 +179,21 @@ interface BookCardProps {
   onRemove: (book: BookMeta) => void;
   /** Called when clear-cache button is clicked */
   onClearCache: (book: BookMeta) => void;
+  /** Whether the book is currently being extracted into the cache */
+  isExtracting?: boolean;
 }
 
 /**
  * BookCard component displays a book in the library grid.
  * Shows cover image, title, author, and a remove button on hover.
  */
-function BookCard({ book, onClick, onRemove, onClearCache }: BookCardProps) {
+function BookCard({
+  book,
+  onClick,
+  onRemove,
+  onClearCache,
+  isExtracting = false,
+}: BookCardProps) {
   const handleRemove = (e: React.MouseEvent) => {
     e.stopPropagation();
     onRemove(book);
@@ -161,7 +206,12 @@ function BookCard({ book, onClick, onRemove, onClearCache }: BookCardProps) {
 
   return (
     <Card>
-      <OpenButton type="button" onClick={() => onClick(book)}>
+      <OpenButton
+        type="button"
+        onClick={() => onClick(book)}
+        disabled={isExtracting}
+        aria-busy={isExtracting}
+      >
         <CoverWrapper>
           {book.coverUrl ? (
             <Cover src={book.coverUrl} alt={book.title} />
@@ -169,6 +219,12 @@ function BookCard({ book, onClick, onRemove, onClearCache }: BookCardProps) {
             <PlaceholderCover>
               {book.title.charAt(0).toUpperCase()}
             </PlaceholderCover>
+          )}
+          {isExtracting && (
+            <ExtractingOverlay>
+              <Spinner aria-hidden="true" />
+              <span>Extracting…</span>
+            </ExtractingOverlay>
           )}
         </CoverWrapper>
         <Title title={book.title}>{book.title}</Title>

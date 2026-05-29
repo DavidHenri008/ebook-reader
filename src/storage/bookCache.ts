@@ -160,6 +160,15 @@ export async function deleteRawBook(bookId: string): Promise<void> {
 }
 
 /**
+ * Returns true when a cached extraction already exists for the book.
+ */
+export async function hasRawBook(bookId: string): Promise<boolean> {
+  const db = await getDb();
+  const key = await db.getKey(META_STORE, bookId);
+  return key !== undefined;
+}
+
+/**
  * Clear all cached extractions for every book.
  */
 export async function clearAllRawBooks(): Promise<void> {
