@@ -119,3 +119,17 @@ export async function applyPaginatedLayout(
   const pageCount = Math.max(1, Math.ceil(cols.scrollWidth / dims.colWidth));
   return { pageCount };
 }
+
+/**
+ * Map an anchor's client rect to its 0-based page (column) index within the
+ * paginated host box. Shared so anchor restoration and any other paginated
+ * page-resolution agree on how a rect's horizontal offset becomes a page.
+ */
+export function pageForAnchorRect(
+  host: HTMLElement,
+  dims: ColDims,
+  rect: { left: number },
+): number {
+  const hostLeft = host.getBoundingClientRect().left;
+  return Math.max(0, Math.floor((rect.left - hostLeft) / dims.pageWidth));
+}

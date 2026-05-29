@@ -23,7 +23,11 @@ import {
   createScrolledSentinel,
   getMountedScrolledSection,
 } from "./scrolled";
-import { applyPaginatedLayout, getColDims } from "../../reader/paginated";
+import {
+  applyPaginatedLayout,
+  getColDims,
+  pageForAnchorRect,
+} from "../../reader/paginated";
 import { viewportsAlmostEqual } from "../../services/pageEstimation";
 
 const SCROLLED_POSITION_SAVE_DELAY_MS = 160;
@@ -404,16 +408,12 @@ export function useSectionViewer({
         if (rects.length === 0) return;
 
         const host = hostRef.current!;
-        const hostRect = host.getBoundingClientRect();
         const dims = getColDims(
           sectionViewportRef.current,
           wrapperRef.current,
           targetZoom,
         );
-        const page = Math.max(
-          0,
-          Math.floor((rects[0].left - hostRect.left) / dims.pageWidth),
-        );
+        const page = pageForAnchorRect(host, dims, rects[0]);
         const clamped = Math.min(page, pageCountRef.current - 1);
         applyPage(clamped);
         cols.style.transform = `translateX(-${clamped * dims.colWidth}px)`;
