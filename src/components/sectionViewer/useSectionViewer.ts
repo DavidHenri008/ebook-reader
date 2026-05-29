@@ -50,6 +50,21 @@ interface UseSectionViewerResult {
   navigateNext: () => void;
 }
 
+// Topmost section element currently intersecting the viewport, plus its
+// section index. Shared by readVisiblePosition and the scroll handler.
+function readTopmostVisibleSection(
+  contentRoot: Element,
+  viewTop: number,
+  viewBottom: number,
+): { element: HTMLElement; index: number } | null {
+  const element = getTopmostVisibleSection(contentRoot, viewTop, viewBottom);
+  const index = Number(element?.dataset.sectionIndex);
+  if (element && Number.isFinite(index)) {
+    return { element, index };
+  }
+  return null;
+}
+
 export function useSectionViewer({
   sections,
   currentSection,
@@ -218,15 +233,14 @@ export function useSectionViewer({
     }
 
     if (modeRef.current === "scrolled") {
-      const visibleSection = getTopmostVisibleSection(
+      const visible = readTopmostVisibleSection(
         contentRoot,
         rect.top,
         rect.bottom,
       );
-      const visibleSectionIndex = Number(visibleSection?.dataset.sectionIndex);
-      if (visibleSection && Number.isFinite(visibleSectionIndex)) {
-        anchorRoot = visibleSection;
-        sectionIndex = visibleSectionIndex;
+      if (visible) {
+        anchorRoot = visible.element;
+        sectionIndex = visible.index;
       }
     }
 
@@ -241,41 +255,46 @@ export function useSectionViewer({
     return { sectionIndex, anchor: newAnchor };
   }, []);
 
+  // Persist a visible position. With `defer`, the report is scheduled on idle
+  // (scroll/page saves); otherwise it fires synchronously (flush on teardown
+  // or mode switch). Scrolled-mode section changes notify onNavigate.
+  const commitPosition = useCallback(
+    (
+      position: { sectionIndex: number; anchor: number },
+      { defer }: { defer: boolean },
+    ) => {
+      anchorRef.current = position.anchor;
+
+      if (
+        modeRef.current === "scrolled" &&
+        position.sectionIndex !== sectionRef.current
+      ) {
+        sectionRef.current = position.sectionIndex;
+        onNavigateRef.current?.(position.sectionIndex);
+      }
+
+      idleHandleRef.current?.cancel();
+      if (defer) {
+        idleHandleRef.current = scheduleIdle(() => {
+          onPositionChangeRef.current(position);
+        });
+      } else {
+        idleHandleRef.current = null;
+        onPositionChangeRef.current(position);
+      }
+    },
+    [],
+  );
+
   const saveAnchor = useCallback(() => {
     const position = readVisiblePosition();
-    if (!position) return;
-
-    const { sectionIndex, anchor: newAnchor } = position;
-    anchorRef.current = newAnchor;
-
-    if (modeRef.current === "scrolled" && sectionIndex !== sectionRef.current) {
-      sectionRef.current = sectionIndex;
-      onNavigateRef.current?.(sectionIndex);
-    }
-
-    idleHandleRef.current?.cancel();
-    idleHandleRef.current = scheduleIdle(() => {
-      onPositionChangeRef.current(position);
-    });
-  }, [readVisiblePosition]);
+    if (position) commitPosition(position, { defer: true });
+  }, [readVisiblePosition, commitPosition]);
 
   const flushAnchor = useCallback(() => {
     const position = readVisiblePosition();
-    if (!position) return;
-
-    anchorRef.current = position.anchor;
-    if (
-      modeRef.current === "scrolled" &&
-      position.sectionIndex !== sectionRef.current
-    ) {
-      sectionRef.current = position.sectionIndex;
-      onNavigateRef.current?.(position.sectionIndex);
-    }
-
-    idleHandleRef.current?.cancel();
-    idleHandleRef.current = null;
-    onPositionChangeRef.current(position);
-  }, [readVisiblePosition]);
+    if (position) commitPosition(position, { defer: false });
+  }, [readVisiblePosition, commitPosition]);
 
   const cancelPendingScrolledWork = useCallback(() => {
     if (scrollFrameRef.current !== null) {
@@ -303,20 +322,11 @@ export function useSectionViewer({
     }
 
     const rect = wrapper.getBoundingClientRect();
-    const visibleSection = getTopmostVisibleSection(
-      contentRoot,
-      rect.top,
-      rect.bottom,
-    );
-    const visibleSectionIndex = Number(visibleSection?.dataset.sectionIndex);
+    const visible = readTopmostVisibleSection(contentRoot, rect.top, rect.bottom);
 
-    if (
-      visibleSection &&
-      Number.isFinite(visibleSectionIndex) &&
-      visibleSectionIndex !== sectionRef.current
-    ) {
-      sectionRef.current = visibleSectionIndex;
-      onNavigateRef.current?.(visibleSectionIndex);
+    if (visible && visible.index !== sectionRef.current) {
+      sectionRef.current = visible.index;
+      onNavigateRef.current?.(visible.index);
     }
   }, []);
 
