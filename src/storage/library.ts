@@ -138,7 +138,14 @@ export async function getAllBooks(): Promise<BookMeta[]> {
  * @returns BookMeta without fileData
  */
 function bookToMeta(book: StoredBook): BookMeta {
-  const { fileData: _fileData, ...meta } = book;
-  void _fileData;
-  return meta;
+  return {
+    id: book.id,
+    title: book.title,
+    author: book.author,
+    coverUrl: book.coverUrl,
+    filename: book.filename,
+    fileSize: book.fileSize,
+    addedAt: book.addedAt,
+    lastOpenedAt: book.lastOpenedAt,
+  };
 }

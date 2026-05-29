@@ -411,7 +411,6 @@ export async function extractRawBook(
       return result;
     }
 
-
     async function inlineAssets(
       html: string,
       sectionUrl: string,

@@ -17,10 +17,8 @@ export interface MeasuredPageMap {
 }
 
 export interface PagePosition {
-  sectionNumber: number;
   page: number;
   total: number;
-  estimated: boolean;
 }
 
 /**
@@ -96,7 +94,7 @@ export function getEstimatedPagePosition(
 ): PagePosition {
   const sectionCount = sectionTextLengths.length;
   if (sectionCount === 0) {
-    return { sectionNumber: 1, page: 1, total: 1, estimated: true };
+    return { page: 1, total: 1 };
   }
 
   const charsPerPage = estimateCharsPerPage(zoom);
@@ -123,10 +121,8 @@ export function getEstimatedPagePosition(
   }
 
   return {
-    sectionNumber: safeSection + 1,
     page: previousPages + pageInSection,
     total: Math.max(1, total),
-    estimated: true,
   };
 }
 
@@ -137,7 +133,7 @@ export function getMeasuredPagePosition(
 ): PagePosition {
   const sectionCount = pageMap.pageCounts.length;
   if (sectionCount === 0) {
-    return { sectionNumber: 1, page: 1, total: 1, estimated: false };
+    return { page: 1, total: 1 };
   }
 
   const safeSection = clampSectionIndex(currentSection, sectionCount);
@@ -151,10 +147,8 @@ export function getMeasuredPagePosition(
     .reduce((sum, count) => sum + count, 0);
 
   return {
-    sectionNumber: safeSection + 1,
     page: previousPages + pageIndex + 1,
     total: Math.max(1, pageMap.total),
-    estimated: false,
   };
 }
 
