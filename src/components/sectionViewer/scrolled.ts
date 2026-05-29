@@ -6,11 +6,19 @@
 import type { RawSection } from "../../types";
 import { setSectionContent } from "../../reader/shadowHost";
 
+/**
+ * Looks up a section by index.
+ *
+ * Section array position and {@link RawSection.index} (the epubjs spine index)
+ * are guaranteed equal: extraction builds `sections[i]` from spine item `i`,
+ * and epubjs assigns contiguous spine indices in spine order. Callers may
+ * therefore treat the value as a plain array index.
+ */
 export function lookupSection(
   sections: RawSection[],
   idx: number,
 ): RawSection | undefined {
-  return sections[idx] ?? sections.find((s) => s.index === idx);
+  return sections[idx];
 }
 
 export function createScrolledSection(

@@ -5,14 +5,9 @@ import { SectionViewer, ReaderToolbar, ReaderSidebar } from "../components";
 import {
   loadReadingState,
   updateLastOpened,
-  getBookMeta,
   getCurrentLibraryTheme,
 } from "../storage";
 import { sectionIndexForHref } from "../services/bookExtractor";
-import {
-  bookTitleFromUrlSegment,
-  readerPathForBookTitle,
-} from "../utils/bookTitleUrl";
 import {
   clampSectionIndex,
   normalizeAnchor,
@@ -28,12 +23,15 @@ import {
   usePageMap,
   useReaderTheme,
   useReaderPersistence,
+  useReaderBookTitle,
 } from "./reader";
 import type {
   ReadingState,
   ReadingMode,
   Theme,
   PageViewport,
+  RawExtractedBook,
+  TocItem,
 } from "../types";
 
 //#region Styled Components
@@ -74,6 +72,85 @@ const ZOOM_STEP = 10;
 const ZOOM_MIN = 20;
 const ZOOM_MAX = 400;
 
+interface ReaderBodyProps {
+  file: File | null;
+  readingState: ReadingState | null;
+  extractedBook: RawExtractedBook | null;
+  extractionProgress: string | null;
+  toc: TocItem[];
+  onNavigate: (href: string) => void;
+  pagePosition: { page: number; total: number };
+  bookId: string | null;
+  currentSection: number;
+  anchor: number;
+  zoom: number;
+  mode: ReadingMode;
+  theme: Theme;
+  onPositionChange: (pos: { sectionIndex: number; anchor: number }) => void;
+  onSectionNavigate: (sectionIndex: number) => void;
+  onViewportChange: (viewport: PageViewport) => void;
+}
+
+function ReaderBody({
+  file,
+  readingState,
+  extractedBook,
+  extractionProgress,
+  toc,
+  onNavigate,
+  pagePosition,
+  bookId,
+  currentSection,
+  anchor,
+  zoom,
+  mode,
+  theme,
+  onPositionChange,
+  onSectionNavigate,
+  onViewportChange,
+}: ReaderBodyProps) {
+  if (!file || !readingState) return null;
+
+  if (!extractedBook) {
+    return (
+      <ProgressBody>
+        <ProgressText>{extractionProgress ?? "Loading..."}</ProgressText>
+      </ProgressBody>
+    );
+  }
+
+  const safeCurrentSection = clampSectionIndex(
+    currentSection,
+    extractedBook.sections.length,
+  );
+  const safeAnchor = normalizeAnchor(anchor);
+
+  return (
+    <Container>
+      <ReaderSidebar
+        toc={toc}
+        onNavigate={onNavigate}
+        page={pagePosition.page}
+        total={pagePosition.total}
+      />
+
+      <SectionViewer
+        sections={extractedBook.sections}
+        styles={extractedBook.styles}
+        bookId={bookId ?? ""}
+        currentSection={safeCurrentSection}
+        anchor={safeAnchor}
+        zoom={zoom}
+        mode={mode}
+        theme={theme}
+        onPositionChange={onPositionChange}
+        onNavigate={onSectionNavigate}
+        onViewportChange={onViewportChange}
+      />
+    </Container>
+  );
+}
+
 function ReaderPage() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -97,10 +174,6 @@ function ReaderPage() {
   const [viewerViewport, setViewerViewport] = useState<PageViewport | null>(
     null,
   );
-  const [loadedBookTitle, setLoadedBookTitle] = useState<{
-    bookId: string;
-    title: string;
-  } | null>(null);
 
   const {
     extractedBook,
@@ -108,17 +181,10 @@ function ReaderPage() {
     progressMessage: extractionProgress,
   } = useBookExtraction(file, bookId);
 
-  const titleFromRoute = useMemo(
-    () => bookTitleFromUrlSegment(routeBookTitle),
-    [routeBookTitle],
-  );
-  const storedBookTitle =
-    loadedBookTitle?.bookId === bookId ? loadedBookTitle.title : null;
-  const bookTitle =
-    locationState?.bookTitle ?? storedBookTitle ?? titleFromRoute ?? "";
-  const canonicalReaderPath = useMemo(
-    () => (bookTitle ? readerPathForBookTitle(bookTitle) : null),
-    [bookTitle],
+  const { bookTitle } = useReaderBookTitle(
+    bookId,
+    locationState?.bookTitle,
+    routeBookTitle,
   );
 
   const sectionTextLengths = useMemo(
@@ -151,29 +217,6 @@ function ReaderPage() {
   useEffect(() => {
     if (bookId) updateLastOpened(bookId);
   }, [bookId]);
-
-  useEffect(() => {
-    if (!bookId || locationState?.bookTitle) return;
-
-    let cancelled = false;
-    getBookMeta(bookId).then((book) => {
-      if (!cancelled && book) {
-        setLoadedBookTitle({ bookId, title: book.title });
-      }
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [bookId, locationState?.bookTitle]);
-
-  useEffect(() => {
-    if (!canonicalReaderPath || location.pathname === canonicalReaderPath) {
-      return;
-    }
-
-    navigate(canonicalReaderPath, { replace: true, state: location.state });
-  }, [canonicalReaderPath, location.pathname, location.state, navigate]);
 
   useEffect(() => {
     if (!bookId) return;
@@ -268,46 +311,6 @@ function ReaderPage() {
   }, [navigate]);
 
   const controlsDisabled = !file || !readingState || !extractedBook;
-  let body: React.ReactNode = null;
-
-  if (file && readingState && !extractedBook) {
-    body = (
-      <ProgressBody>
-        <ProgressText>{extractionProgress ?? "Loading..."}</ProgressText>
-      </ProgressBody>
-    );
-  } else if (file && readingState && extractedBook) {
-    const safeCurrentSection = clampSectionIndex(
-      currentSection,
-      extractedBook.sections.length,
-    );
-    const safeAnchor = normalizeAnchor(anchor);
-
-    body = (
-      <Container>
-        <ReaderSidebar
-          toc={toc}
-          onNavigate={handleNavigate}
-          page={pagePosition.page}
-          total={pagePosition.total}
-        />
-
-        <SectionViewer
-          sections={extractedBook.sections}
-          styles={extractedBook.styles}
-          bookId={bookId ?? ""}
-          currentSection={safeCurrentSection}
-          anchor={safeAnchor}
-          zoom={zoom}
-          mode={mode}
-          theme={theme}
-          onPositionChange={handlePositionChange}
-          onNavigate={handleSectionNavigate}
-          onViewportChange={handleViewportChange}
-        />
-      </Container>
-    );
-  }
 
   return (
     <Root>
@@ -323,7 +326,24 @@ function ReaderPage() {
         onBackToLibrary={handleBackToLibrary}
         controlsDisabled={controlsDisabled}
       />
-      {body}
+      <ReaderBody
+        file={file}
+        readingState={readingState}
+        extractedBook={extractedBook}
+        extractionProgress={extractionProgress}
+        toc={toc}
+        onNavigate={handleNavigate}
+        pagePosition={pagePosition}
+        bookId={bookId}
+        currentSection={currentSection}
+        anchor={anchor}
+        zoom={zoom}
+        mode={mode}
+        theme={theme}
+        onPositionChange={handlePositionChange}
+        onSectionNavigate={handleSectionNavigate}
+        onViewportChange={handleViewportChange}
+      />
     </Root>
   );
 }
