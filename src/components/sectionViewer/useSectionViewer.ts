@@ -453,6 +453,21 @@ export function useSectionViewer({
     [applyPage],
   );
 
+  // Restores the given anchor on the next animation frame. Used after a render
+  // (or layout-affecting change) so the DOM has settled before measuring.
+  const restoreOnNextFrame = useCallback(
+    (
+      targetAnchor: number,
+      targetMode: "paginated" | "scrolled",
+      targetZoom: number,
+    ) => {
+      requestAnimationFrame(() =>
+        restoreAnchor(targetAnchor, targetMode, targetZoom),
+      );
+    },
+    [restoreAnchor],
+  );
+
   // ── Paginated render ─────────────────────────────────────────────────────
 
   const renderPaginated = useCallback(
@@ -496,6 +511,29 @@ export function useSectionViewer({
       return count;
     },
     [ensureShadow, sections, applyCount, applyPage],
+  );
+
+  // Renders a paginated section from its first page, then restores the target
+  // anchor on the next frame. Wraps the common render→restore sequence shared
+  // by the mount/prop-change effect and the ResizeObserver.
+  const renderPaginatedThenRestore = useCallback(
+    (sIdx: number, zoomValue: number, targetAnchor: number) =>
+      renderPaginated(sIdx, zoomValue, 0).then(() => {
+        restoreOnNextFrame(targetAnchor, "paginated", zoomValue);
+      }),
+    [renderPaginated, restoreOnNextFrame],
+  );
+
+  // Column dimensions for the live paginated state (current section viewport,
+  // wrapper, and zoom). Used by the paginated navigation handlers.
+  const currentColDims = useCallback(
+    () =>
+      getColDims(
+        sectionViewportRef.current,
+        wrapperRef.current,
+        zoomRef.current,
+      ),
+    [],
   );
 
   // ── Scrolled render + helpers ────────────────────────────────────────────
@@ -670,11 +708,7 @@ export function useSectionViewer({
     if (modeRef.current !== "paginated") return;
     const cols = colsRef.current;
     if (!cols) return;
-    const dims = getColDims(
-      sectionViewportRef.current,
-      wrapperRef.current,
-      zoomRef.current,
-    );
+    const dims = currentColDims();
 
     if (pageRef.current > 0) {
       const newPage = pageRef.current - 1;
@@ -686,28 +720,20 @@ export function useSectionViewer({
       sectionRef.current = prev;
       renderPaginated(prev, zoomRef.current, 99999).then((count) => {
         const lastPage = count - 1;
-        const d = getColDims(
-          sectionViewportRef.current,
-          wrapperRef.current,
-          zoomRef.current,
-        );
+        const d = currentColDims();
         applyPage(lastPage);
         cols.style.transform = `translateX(-${lastPage * d.colWidth}px)`;
         saveAnchor();
       });
       onNavigateRef.current?.(prev);
     }
-  }, [applyPage, saveAnchor, renderPaginated]);
+  }, [applyPage, saveAnchor, renderPaginated, currentColDims]);
 
   const navigateNext = useCallback(() => {
     if (modeRef.current !== "paginated") return;
     const cols = colsRef.current;
     if (!cols) return;
-    const dims = getColDims(
-      sectionViewportRef.current,
-      wrapperRef.current,
-      zoomRef.current,
-    );
+    const dims = currentColDims();
 
     if (pageRef.current < pageCountRef.current - 1) {
       const newPage = pageRef.current + 1;
@@ -720,7 +746,7 @@ export function useSectionViewer({
       renderPaginated(next, zoomRef.current, 0).then(() => saveAnchor());
       onNavigateRef.current?.(next);
     }
-  }, [applyPage, saveAnchor, renderPaginated, sections.length]);
+  }, [applyPage, saveAnchor, renderPaginated, sections.length, currentColDims]);
 
   // ── Keyboard navigation ──────────────────────────────────────────────────
 
@@ -755,12 +781,10 @@ export function useSectionViewer({
       themeRef.current = theme;
 
       if (mode === "paginated") {
-        renderPaginated(currentSection, zoom, 0).then(() => {
-          requestAnimationFrame(() => restoreAnchor(anchor, mode, zoom));
-        });
+        renderPaginatedThenRestore(currentSection, zoom, anchor);
       } else {
         renderScrolled(currentSection);
-        requestAnimationFrame(() => restoreAnchor(anchor, mode, zoom));
+        restoreOnNextFrame(anchor, mode, zoom);
       }
       return;
     }
@@ -775,7 +799,7 @@ export function useSectionViewer({
     if (!sectionChanged && !zoomChanged && !themeChanged && !modeChanged) {
       if (mode === "scrolled" && flowRef.current?.childElementCount === 0) {
         renderScrolled(currentSection);
-        requestAnimationFrame(() => restoreAnchor(anchor, mode, zoom));
+        restoreOnNextFrame(anchor, mode, zoom);
       }
       return;
     }
@@ -801,43 +825,32 @@ export function useSectionViewer({
     }
 
     if (modeChanged) {
+      teardownScrolled();
       if (mode === "paginated") {
-        teardownScrolled();
-        renderPaginated(targetSection, zoom, 0).then(() => {
-          requestAnimationFrame(() => restoreAnchor(targetAnchor, mode, zoom));
-        });
+        renderPaginatedThenRestore(targetSection, zoom, targetAnchor);
       } else {
-        teardownScrolled();
         renderScrolled(targetSection);
-        requestAnimationFrame(() => restoreAnchor(targetAnchor, mode, zoom));
+        restoreOnNextFrame(targetAnchor, mode, zoom);
       }
       return;
     }
 
     if (sectionChanged) {
       if (mode === "paginated") {
-        renderPaginated(currentSection, zoom, 0).then(() => {
-          requestAnimationFrame(() => restoreAnchor(anchor, mode, zoom));
-        });
+        renderPaginatedThenRestore(currentSection, zoom, anchor);
       } else {
         teardownScrolled();
         renderScrolled(currentSection);
-        requestAnimationFrame(() => restoreAnchor(anchor, mode, zoom));
+        restoreOnNextFrame(anchor, mode, zoom);
       }
       return;
     }
 
     if (zoomChanged) {
       if (mode === "paginated") {
-        renderPaginated(currentSection, zoom, 0).then(() => {
-          requestAnimationFrame(() =>
-            restoreAnchor(anchorRef.current, mode, zoom),
-          );
-        });
+        renderPaginatedThenRestore(currentSection, zoom, anchorRef.current);
       } else {
-        requestAnimationFrame(() =>
-          restoreAnchor(anchorRef.current, mode, zoom),
-        );
+        restoreOnNextFrame(anchorRef.current, mode, zoom);
       }
     }
     // theme-only: style already updated above; no re-render needed
@@ -848,10 +861,10 @@ export function useSectionViewer({
     mode,
     anchor,
     readVisiblePosition,
-    renderPaginated,
+    renderPaginatedThenRestore,
     renderScrolled,
     teardownScrolled,
-    restoreAnchor,
+    restoreOnNextFrame,
   ]);
 
   // ── Cleanup on unmount ────────────────────────────────────────────────────
@@ -886,18 +899,16 @@ export function useSectionViewer({
           if (last && viewportsAlmostEqual(last, rect)) {
             return;
           }
-          renderPaginated(sectionRef.current, zoomRef.current, 0).then(() => {
-            requestAnimationFrame(() =>
-              restoreAnchor(
-                anchorRef.current,
-                modeRef.current,
-                zoomRef.current,
-              ),
-            );
-          });
+          renderPaginatedThenRestore(
+            sectionRef.current,
+            zoomRef.current,
+            anchorRef.current,
+          );
         } else {
-          requestAnimationFrame(() =>
-            restoreAnchor(anchorRef.current, modeRef.current, zoomRef.current),
+          restoreOnNextFrame(
+            anchorRef.current,
+            modeRef.current,
+            zoomRef.current,
           );
         }
       }, 100);
@@ -910,7 +921,7 @@ export function useSectionViewer({
       resizeObserverRef.current = null;
       if (debounce) clearTimeout(debounce);
     };
-  }, [renderPaginated, restoreAnchor, reportViewport]);
+  }, [renderPaginatedThenRestore, restoreOnNextFrame, reportViewport]);
 
   // ── Scroll → save anchor (scrolled mode) ─────────────────────────────────
 
