@@ -21,8 +21,8 @@ import {
 import {
   getEstimatedPagePosition,
   getMeasuredPagePosition,
-  viewportsAlmostEqual,
 } from "../services/pageEstimation";
+import { viewportsAlmostEqual } from "../reader/viewport";
 import {
   useBookExtraction,
   usePageMap,
@@ -69,6 +69,10 @@ interface LocationState {
   bookTitle?: string;
   theme?: Theme;
 }
+
+const ZOOM_STEP = 10;
+const ZOOM_MIN = 20;
+const ZOOM_MAX = 400;
 
 function ReaderPage() {
   const location = useLocation();
@@ -231,23 +235,23 @@ function ReaderPage() {
     [extractedBook],
   );
 
-  const zoomIn = useCallback(
-    () =>
+  const applyZoomDelta = useCallback(
+    (delta: number) =>
       setZoom((z) => {
-        const next = Math.min(z + 10, 400);
+        const next = Math.min(Math.max(z + delta, ZOOM_MIN), ZOOM_MAX);
         saveZoom(next);
         return next;
       }),
     [saveZoom],
   );
+
+  const zoomIn = useCallback(
+    () => applyZoomDelta(ZOOM_STEP),
+    [applyZoomDelta],
+  );
   const zoomOut = useCallback(
-    () =>
-      setZoom((z) => {
-        const next = Math.max(z - 10, 20);
-        saveZoom(next);
-        return next;
-      }),
-    [saveZoom],
+    () => applyZoomDelta(-ZOOM_STEP),
+    [applyZoomDelta],
   );
 
   const handleModeChange = useCallback(

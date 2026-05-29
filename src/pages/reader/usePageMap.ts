@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   measurePageMap,
-  viewportsAlmostEqual,
   type MeasuredPageMap,
 } from "../../services/pageEstimation";
+import { viewportsAlmostEqual } from "../../reader/viewport";
 import type { PageViewport, RawExtractedBook, Theme } from "../../types";
 
 /**

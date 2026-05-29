@@ -29,7 +29,7 @@ import {
   getColDims,
   pageForAnchorRect,
 } from "../../reader/paginated";
-import { viewportsAlmostEqual } from "../../services/pageEstimation";
+import { viewportsAlmostEqual } from "../../reader/viewport";
 
 const SCROLLED_POSITION_SAVE_DELAY_MS = 160;
 

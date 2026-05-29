@@ -6,16 +6,11 @@
  */
 
 import type { Theme } from "../types";
-
-const THEME_CSS: Record<Theme, string> = {
-  light:
-    "--bg:#ffffff;--text:#6b6375;--text-heading:#08060d;--border:#e5e4e7;color-scheme:light;",
-  dark: "--bg:#16171d;--text:#9ca3af;--text-heading:#f3f4f6;--border:#2e303a;color-scheme:dark;",
-};
+import { readerHostCssVariables } from "../styles/palette";
 
 export function buildHostStyle(zoom: number, theme: Theme): string {
   return `
-    :host{display:block;width:100%;${THEME_CSS[theme]}}
+    :host{display:block;width:100%;${readerHostCssVariables(theme)}}
     .clamp,.flow{zoom:${zoom / 100};}
     .flow{display:block;position:relative;overflow:visible;}
     .cols,.flow-section{position:relative;z-index:0;isolation:isolate;}

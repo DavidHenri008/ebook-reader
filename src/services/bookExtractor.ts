@@ -1,10 +1,13 @@
-import ePub from "epubjs";
 import type { RawSection, RawExtractedBook } from "../types/bookPages";
 import type { TocItem } from "../types/epub";
 import { getPlainTextLength } from "../utils/htmlText";
 import { getFirstBrowserBlobUrl } from "../utils/htmlReferences";
 import { yieldToBrowser } from "../utils/async";
 import { blobToDataUrl } from "../utils/blob";
+import {
+  createEpubBook,
+  disableEpubJsResourceSubstitution,
+} from "./epubjsAdapter";
 
 type NavItem = {
   id: string;
@@ -54,12 +57,6 @@ type EpubBook = {
   destroy: () => void;
 };
 
-type EpubFactory = (
-  fileData: ArrayBuffer,
-  options: { replacements: "none" },
-) => EpubBook;
-
-const createBook = ePub as unknown as EpubFactory;
 const ASSET_ATTRIBUTE_NAMES = [
   "srcset",
   "src",
@@ -187,13 +184,6 @@ function throwIfAborted(signal?: AbortSignal): void {
   }
 }
 
-function disableEpubJsResourceSubstitution(book: EpubBook): void {
-  if (book.resources) {
-    book.resources.replaceCss = () => Promise.resolve();
-  }
-  book.spine.hooks?.serialize?.clear();
-}
-
 async function resourceToDataUrl(
   resources: ResourceCollection,
   absUrl: string,
@@ -262,7 +252,7 @@ export async function extractRawBook(
   await reportProgress(onProgress, 0, 0, "Opening book...");
   throwIfAborted(signal);
 
-  const book = createBook(fileData, { replacements: "none" });
+  const book = createEpubBook<EpubBook>(fileData);
 
   try {
     await reportProgress(onProgress, 0, 0, "Reading book resources...");

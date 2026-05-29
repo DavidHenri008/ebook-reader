@@ -1,5 +1,8 @@
-import ePub from "epubjs";
 import { blobToDataUrl } from "../utils/blob";
+import {
+  createEpubBook,
+  disableEpubJsResourceSubstitution,
+} from "./epubjsAdapter";
 
 type EpubMetadata = {
   title?: string;
@@ -18,20 +21,6 @@ type EpubMetadataBook = {
   destroy: () => void;
 };
 
-type EpubMetadataFactory = (
-  fileData: ArrayBuffer,
-  options: { replacements: "none" },
-) => EpubMetadataBook;
-
-const createMetadataBook = ePub as unknown as EpubMetadataFactory;
-
-function disableEpubJsResourceSubstitution(book: EpubMetadataBook): void {
-  if (book.resources) {
-    book.resources.replaceCss = () => Promise.resolve();
-  }
-  book.spine?.hooks?.serialize?.clear();
-}
-
 /**
  * Extract metadata from an EPUB file.
  * @param buffer - ArrayBuffer of the EPUB file
@@ -42,7 +31,7 @@ export async function extractEpubMetadata(
   buffer: ArrayBuffer,
   filename: string,
 ): Promise<{ title: string; author?: string; coverUrl?: string }> {
-  const book = createMetadataBook(buffer, { replacements: "none" });
+  const book = createEpubBook<EpubMetadataBook>(buffer);
 
   try {
     await book.loaded.resources;
