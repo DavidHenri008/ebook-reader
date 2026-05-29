@@ -160,6 +160,7 @@ export function getMeasuredPagePosition(
 
 export async function measurePageMap(
   sections: RawSection[],
+  styles: string[],
   zoom: number,
   viewport: PageViewport,
   theme: Theme,
@@ -170,8 +171,11 @@ export async function measurePageMap(
   measurementViewport.appendChild(host);
   document.body.appendChild(measurementViewport);
 
+  let disposeFonts: () => void = () => {};
   try {
-    const { clamp, cols, flow } = initShadowHost(host, zoom, theme);
+    const parts = initShadowHost(host, zoom, theme, styles.join("\n"));
+    const { clamp, cols, flow } = parts;
+    disposeFonts = parts.disposeFonts;
     const sectionPageStarts: number[][] = [];
     const pageCounts: number[] = [];
 
@@ -224,6 +228,7 @@ export async function measurePageMap(
       viewport,
     };
   } finally {
+    disposeFonts();
     measurementViewport.remove();
   }
 }

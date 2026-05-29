@@ -31,6 +31,7 @@ type ResourceCollection = {
         url: string,
         mimeType?: string,
       ) => Promise<string> | undefined;
+      getText?: (url: string, encoding?: string) => Promise<string> | undefined;
     };
     resolver: (href: string) => string;
     request: (href: string, type?: string) => Promise<unknown>;
@@ -204,6 +205,38 @@ async function resourceToDataUrl(
   return asset instanceof Blob ? blobToDataUrl(asset) : null;
 }
 
+function isCssReference(reference: string): boolean {
+  return /\.css(?:[?#]|$)/i.test(reference);
+}
+
+async function cssTextToDataUrl(css: string): Promise<string> {
+  return blobToDataUrl(new Blob([css], { type: "text/css" }));
+}
+
+/**
+ * Map each `url(...)` reference inside a CSS file to its absolute resource URL.
+ * `relativeTo(cssAbsUrl)` yields every resource path relative to the CSS file,
+ * mirroring epubjs's own `createCssFile`/`replaceCss` resolution.
+ */
+function buildCssRefToAbs(
+  resources: ResourceCollection,
+  baseAbsUrl: string,
+): Map<string, string> {
+  const refToAbs = new Map<string, string>();
+  const relUrls = resources.relativeTo(baseAbsUrl);
+  relUrls.forEach((rel, index) => {
+    if (!rel) return;
+    const abs = resources.settings.resolver(resources.urls[index]);
+    refToAbs.set(rel, abs);
+    if (rel.startsWith("./")) {
+      refToAbs.set(rel.slice(2), abs);
+    } else {
+      refToAbs.set(`./${rel}`, abs);
+    }
+  });
+  return refToAbs;
+}
+
 async function reportProgress(
   onProgress: ExtractionProgressCallback | undefined,
   done: number,
@@ -248,6 +281,136 @@ export async function extractRawBook(
       .catch(() => [] as TocItem[]);
 
     const assetCache = new Map<string, string>();
+    const sharedStyleByUrl = new Map<string, string>();
+
+    // Resolve a resource to a data URL, recursing through CSS so that fonts
+    // and images referenced via `url(...)` inside an `@import`ed stylesheet are
+    // inlined too. Cached by absolute URL to dedupe shared assets.
+    async function resolveAssetDataUrl(
+      res: ResourceCollection,
+      absUrl: string,
+      visited: Set<string>,
+    ): Promise<string | null> {
+      const cached = assetCache.get(absUrl);
+      if (cached) return cached;
+
+      let dataUrl: string | null;
+      if (isCssReference(absUrl)) {
+        const css = await buildInlinedCss(res, absUrl, visited);
+        dataUrl = css ? await cssTextToDataUrl(css) : null;
+      } else {
+        dataUrl = await resourceToDataUrl(res, absUrl);
+      }
+      if (dataUrl) assetCache.set(absUrl, dataUrl);
+      return dataUrl;
+    }
+
+    // Return CSS text with every internal `url(...)` reference rewritten to a
+    // data URL. A `data:` base URL cannot resolve relative font/image paths, so
+    // the references must be inlined here for embedded fonts to load.
+    async function buildInlinedCss(
+      res: ResourceCollection,
+      cssAbsUrl: string,
+      visited: Set<string>,
+    ): Promise<string> {
+      if (visited.has(cssAbsUrl)) return "";
+      visited.add(cssAbsUrl);
+
+      // Read the stylesheet text from the EPUB archive. Using `settings.request`
+      // here would issue an HTTP fetch that, under the dev server, resolves to
+      // the SPA `index.html` fallback instead of the CSS.
+      const archiveText = await res.settings.archive?.getText?.(cssAbsUrl);
+      const text =
+        typeof archiveText === "string"
+          ? archiveText
+          : await res.settings.request(cssAbsUrl, "text");
+      let css = typeof text === "string" ? text : "";
+      if (!css) return css;
+
+      const refToAbs = buildCssRefToAbs(res, cssAbsUrl);
+      const refToDataUrl = new Map<string, string>();
+
+      const rawRefs = new Set<string>();
+      CSS_URL_PATTERN.lastIndex = 0;
+      for (const match of css.matchAll(CSS_URL_PATTERN)) {
+        const value = (match[2] ?? "").trim();
+        if (
+          value &&
+          !value.startsWith("#") &&
+          !value.startsWith("data:") &&
+          !isExternalReference(value)
+        ) {
+          rawRefs.add(value);
+        }
+      }
+
+      await Promise.all(
+        Array.from(rawRefs).map(async (ref) => {
+          const abs =
+            refToAbs.get(ref) ?? refToAbs.get(ref.split(/[?#]/)[0] ?? "");
+          if (!abs) return;
+          try {
+            const dataUrl = await resolveAssetDataUrl(res, abs, visited);
+            if (dataUrl) refToDataUrl.set(ref, dataUrl);
+          } catch {
+            // Ignore broken references and keep the rest of the stylesheet.
+          }
+        }),
+      );
+
+      if (refToDataUrl.size === 0) return css;
+
+      css = css.replace(CSS_URL_PATTERN, (full, quote, ref) => {
+        const dataUrl = refToDataUrl.get((ref ?? "").trim());
+        return dataUrl ? `url(${quote}${dataUrl}${quote})` : full;
+      });
+      return css;
+    }
+
+    // Inline each `<link rel="stylesheet">` target once into the shared
+    // book-level map (keyed by absolute URL to dedupe across sections). When a
+    // stylesheet is successfully inlined, its `<link>` is removed so only the
+    // font-inlined copy (injected into the shadow root) applies — otherwise the
+    // original `<link>` redeclares the same `@font-face` families later in
+    // document order with broken relative paths and wins, breaking fonts. If
+    // inlining fails, the `<link>` is kept as a fallback.
+    async function hoistStylesheets(
+      res: ResourceCollection,
+      html: string,
+      sectionUrl: string,
+    ): Promise<string> {
+      const linkTags = html.match(/<link\b[^>]*>/gi);
+      if (!linkTags || linkTags.length === 0) return html;
+
+      const refToAbs = buildCssRefToAbs(res, sectionUrl);
+      let result = html;
+
+      for (const tag of linkTags) {
+        if (!/rel\s*=\s*["']?[^"'>]*stylesheet/i.test(tag)) continue;
+        const hrefMatch = tag.match(/href\s*=\s*["']([^"']+)["']/i);
+        if (!hrefMatch) continue;
+
+        const href = hrefMatch[1].trim();
+        const abs =
+          refToAbs.get(href) ?? refToAbs.get(href.split(/[?#]/)[0] ?? "");
+        if (!abs) continue;
+
+        if (!sharedStyleByUrl.has(abs)) {
+          try {
+            const css = await buildInlinedCss(res, abs, new Set<string>());
+            if (css) sharedStyleByUrl.set(abs, css);
+          } catch {
+            // Ignore a stylesheet that fails to load; keep the section usable.
+          }
+        }
+
+        if (sharedStyleByUrl.has(abs)) {
+          result = result.split(tag).join("");
+        }
+      }
+      return result;
+    }
+
 
     async function inlineAssets(
       html: string,
@@ -319,6 +482,11 @@ export async function extractRawBook(
         let html = await item.render(loadFn);
         throwIfAborted(signal);
 
+        if (resources) {
+          html = await hoistStylesheets(resources, html, item.url);
+          throwIfAborted(signal);
+        }
+
         html = await inlineAssets(html, item.url);
         throwIfAborted(signal);
 
@@ -361,7 +529,13 @@ export async function extractRawBook(
     const toc = await navPromise;
     throwIfAborted(signal);
 
-    return { bookId, sections, toc, extractedAt: Date.now() };
+    return {
+      bookId,
+      sections,
+      styles: Array.from(sharedStyleByUrl.values()),
+      toc,
+      extractedAt: Date.now(),
+    };
   } finally {
     book.destroy();
   }

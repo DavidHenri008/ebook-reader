@@ -36,6 +36,7 @@ export function usePageMap(
 
     measurePageMap(
       extractedBook.sections,
+      extractedBook.styles,
       zoom,
       viewport,
       theme,

@@ -290,6 +290,7 @@ function ReaderPage() {
 
         <SectionViewer
           sections={extractedBook.sections}
+          styles={extractedBook.styles}
           bookId={bookId ?? ""}
           currentSection={safeCurrentSection}
           anchor={safeAnchor}

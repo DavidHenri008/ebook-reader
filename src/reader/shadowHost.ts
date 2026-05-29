@@ -91,24 +91,116 @@ export function measureLogicalContentHeight(
   return Math.ceil(Math.max(minimumHeight, contentHeight));
 }
 
+const FONT_FACE_BLOCK = /@font-face\s*\{[^}]*\}/gi;
+
+/**
+ * Splits book CSS into its `@font-face` rules and everything else.
+ *
+ * `@font-face` rules must be registered at the document level: rules declared
+ * inside a shadow root are silently ignored by the browser, so fonts never load
+ * and content falls back to a default face. The remaining rules (layout,
+ * classes) stay scoped to the shadow root.
+ */
+export function extractFontFaces(css: string): { fonts: string; rest: string } {
+  const fonts: string[] = [];
+  const rest = css.replace(FONT_FACE_BLOCK, (block) => {
+    fonts.push(block);
+    return "";
+  });
+  return { fonts: fonts.join("\n"), rest };
+}
+
+// Ref-counted registry of document-level `@font-face` styles, keyed by their
+// CSS text. The live reader and the off-screen measurement host can share the
+// same (large) inlined font payload without duplicating it in the DOM.
+const documentFontRegistry = new Map<
+  string,
+  { element: HTMLStyleElement; count: number }
+>();
+
+/**
+ * Registers `@font-face` CSS at the document level so the declared fonts load
+ * and become usable inside shadow roots. Returns a disposer that releases the
+ * registration; the underlying `<style>` is removed once no host references it.
+ */
+export function registerDocumentFonts(fontCss: string): () => void {
+  if (!fontCss.trim()) {
+    return () => {};
+  }
+
+  let entry = documentFontRegistry.get(fontCss);
+  if (!entry) {
+    const element = document.createElement("style");
+    element.dataset.readerFonts = "";
+    element.textContent = fontCss;
+    document.head.appendChild(element);
+    entry = { element, count: 0 };
+    documentFontRegistry.set(fontCss, entry);
+  }
+  entry.count += 1;
+
+  let disposed = false;
+  return () => {
+    if (disposed) return;
+    disposed = true;
+    const current = documentFontRegistry.get(fontCss);
+    if (!current) return;
+    current.count -= 1;
+    if (current.count <= 0) {
+      current.element.remove();
+      documentFontRegistry.delete(fontCss);
+    }
+  };
+}
+
+/**
+ * Applies book stylesheets to a shadow root: non-font rules go into the scoped
+ * `bookStyle` element, while `@font-face` rules are (re)registered at the
+ * document level. Disposes the previous font registration first and returns the
+ * new disposer.
+ */
+export function applyBookStyles(
+  bookStyle: HTMLStyleElement,
+  bookStyles: string,
+  disposePreviousFonts: () => void = () => {},
+): () => void {
+  disposePreviousFonts();
+  const { fonts, rest } = extractFontFaces(bookStyles);
+  bookStyle.textContent = rest;
+  return registerDocumentFonts(fonts);
+}
+
 export interface ShadowParts {
   shadow: ShadowRoot;
   style: HTMLStyleElement;
   clamp: HTMLDivElement;
   cols: HTMLDivElement;
   flow: HTMLDivElement;
+  /** Holds the hoisted book stylesheets (with fonts inlined), minus fonts. */
+  bookStyle: HTMLStyleElement;
+  /** Releases the document-level `@font-face` styles for this host. */
+  disposeFonts: () => void;
 }
 
 export function initShadowHost(
   host: HTMLElement,
   zoom: number,
   theme: Theme,
+  bookStyles = "",
 ): ShadowParts {
   const shadow = host.attachShadow({ mode: "open" });
 
   const style = document.createElement("style");
   style.textContent = buildHostStyle(zoom, theme);
   shadow.appendChild(style);
+
+  // Book stylesheets come after the base host style so the book's own layout
+  // rules win. Non-font rules stay scoped to the shadow root; `@font-face`
+  // rules are hoisted to the document level via `applyBookStyles` because
+  // shadow-scoped `@font-face` rules never load.
+  const bookStyle = document.createElement("style");
+  shadow.appendChild(bookStyle);
+  const disposeFonts = applyBookStyles(bookStyle, bookStyles);
 
   const clamp = document.createElement("div");
   clamp.className = "clamp";
@@ -123,5 +215,5 @@ export function initShadowHost(
   shadow.appendChild(clamp);
   shadow.appendChild(flow);
 
-  return { shadow, style, clamp, cols, flow };
+  return { shadow, style, clamp, cols, flow, bookStyle, disposeFonts };
 }

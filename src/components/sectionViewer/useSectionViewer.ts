@@ -16,6 +16,7 @@ import {
   buildHostStyle,
   waitForContentLayout,
   initShadowHost,
+  applyBookStyles,
 } from "../../reader/shadowHost";
 import {
   lookupSection,
@@ -34,6 +35,7 @@ const SCROLLED_POSITION_SAVE_DELAY_MS = 160;
 
 export interface SectionViewerProps {
   sections: RawSection[];
+  styles: string[];
   bookId: string;
   currentSection: number;
   anchor: number;
@@ -71,6 +73,7 @@ function readTopmostVisibleSection(
 
 export function useSectionViewer({
   sections,
+  styles,
   currentSection,
   anchor,
   zoom,
@@ -91,6 +94,8 @@ export function useSectionViewer({
   // ── Shadow DOM refs (created once on mount) ────────────────────────────
   const shadowRef = useRef<ShadowRoot | null>(null);
   const hostStyleRef = useRef<HTMLStyleElement | null>(null);
+  const bookStyleRef = useRef<HTMLStyleElement | null>(null);
+  const disposeFontsRef = useRef<() => void>(() => {});
   const clampRef = useRef<HTMLDivElement | null>(null);
   const colsRef = useRef<HTMLDivElement | null>(null);
   const flowRef = useRef<HTMLDivElement | null>(null);
@@ -101,6 +106,7 @@ export function useSectionViewer({
   const modeRef = useRef(mode);
   const zoomRef = useRef(zoom);
   const themeRef = useRef(theme);
+  const stylesRef = useRef(styles);
   const pageRef = useRef(0);
   const pageCountRef = useRef(1);
   const paginatedRenderIdRef = useRef(0);
@@ -199,14 +205,31 @@ export function useSectionViewer({
       hostRef.current!,
       zoomRef.current,
       themeRef.current,
+      stylesRef.current.join("\n"),
     );
     shadowRef.current = parts.shadow;
     hostStyleRef.current = parts.style;
+    bookStyleRef.current = parts.bookStyle;
+    disposeFontsRef.current = parts.disposeFonts;
     clampRef.current = parts.clamp;
     colsRef.current = parts.cols;
     flowRef.current = parts.flow;
     return { clamp: parts.clamp, cols: parts.cols, flow: parts.flow };
   }, []);
+
+  // Keep the hoisted book stylesheets in sync with the shadow root. They are
+  // normally set once on mount, but a book swap or a late cache load can change
+  // them after the shadow host already exists.
+  useEffect(() => {
+    stylesRef.current = styles;
+    if (bookStyleRef.current) {
+      disposeFontsRef.current = applyBookStyles(
+        bookStyleRef.current,
+        styles.join("\n"),
+        disposeFontsRef.current,
+      );
+    }
+  }, [styles]);
 
   // ── Anchor save / restore ────────────────────────────────────────────────
 
@@ -839,6 +862,8 @@ export function useSectionViewer({
       teardownScrolled(true);
       resizeObserverRef.current?.disconnect();
       resizeObserverRef.current = null;
+      disposeFontsRef.current();
+      disposeFontsRef.current = () => {};
     };
   }, [teardownScrolled]);
 

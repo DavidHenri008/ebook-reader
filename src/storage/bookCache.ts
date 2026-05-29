@@ -77,6 +77,7 @@ export async function saveRawBook(book: RawExtractedBook): Promise<void> {
   tx.objectStore(META_STORE).put({
     bookId: book.bookId,
     sectionCount: book.sections.length,
+    styles: book.styles,
     toc: book.toc,
     extractedAt: book.extractedAt,
   });
@@ -144,6 +145,7 @@ export async function loadRawBook(
   return {
     bookId,
     sections,
+    styles: meta.styles ?? [],
     toc: meta.toc ?? [],
     extractedAt: meta.extractedAt,
   };

@@ -11,6 +11,7 @@ const DB_VERSION = 1;
 interface StoredMeta {
   bookId: string;
   sectionCount: number;
+  styles?: string[];
   toc: TocItem[];
   extractedAt: number;
 }
