@@ -5,6 +5,13 @@
  * and the page-estimation service.
  */
 
+import {
+  measureLogicalContentHeight,
+  nextAnimationFrame,
+  setSectionContent,
+  waitForContentLayout,
+} from "./shadowHost";
+
 export interface ColDims {
   colWidth: number;
   colHeight: number;
@@ -49,4 +56,66 @@ export function getColDims(
     pageWidth: viewportWidth * zoomFactor,
     pageHeight: viewportHeight * zoomFactor,
   };
+}
+
+export interface PaginatedLayoutResult {
+  /** Number of pages (columns) the section occupies at the given dimensions. */
+  pageCount: number;
+}
+
+/**
+ * Apply the deterministic paginated DOM layout for a single section into the
+ * shadow host/clamp/cols elements, then measure how many pages it occupies.
+ *
+ * This is the shared layout block used by both the live paginated renderer and
+ * the off-screen page-map measurement. Caller-specific orchestration (render-id
+ * bumping, ref mutation, page translation, abort throwing) stays with the
+ * caller.
+ *
+ * @param host - Physical page box element.
+ * @param clamp - Clamp element wrapping the columns.
+ * @param cols - Column flow element that receives the section HTML.
+ * @param flow - Scrolled-mode flow element (hidden in paginated mode).
+ * @param dims - Column/page dimensions for this section.
+ * @param zoom - Zoom level as a percentage (e.g. 100 for 100%).
+ * @param html - Section HTML to render.
+ * @param shouldCancel - Optional check run after layout settles; when it
+ *   returns true the helper bails out and resolves to `null`.
+ * @returns The measured page count, or `null` if cancelled.
+ */
+export async function applyPaginatedLayout(
+  host: HTMLElement,
+  clamp: HTMLElement,
+  cols: HTMLElement,
+  flow: HTMLElement,
+  dims: ColDims,
+  zoom: number,
+  html: string,
+  shouldCancel?: () => boolean,
+): Promise<PaginatedLayoutResult | null> {
+  host.style.width = `${dims.pageWidth}px`;
+  host.style.height = `${dims.pageHeight}px`;
+
+  flow.style.display = "none";
+  clamp.style.cssText = `display:block;width:${dims.colWidth}px;height:${dims.colHeight}px;overflow:hidden;`;
+  cols.style.cssText = `column-width:${dims.colWidth}px;column-gap:0;column-fill:auto;width:${dims.colWidth}px;height:${dims.colHeight}px;`;
+  cols.style.transform = "";
+  setSectionContent(cols, html);
+
+  await waitForContentLayout(cols);
+  if (shouldCancel?.()) return null;
+
+  const zoomFactor = zoom / 100;
+  const contentHeight = measureLogicalContentHeight(
+    cols,
+    zoomFactor,
+    dims.colHeight,
+  );
+  host.style.height = `${contentHeight * zoomFactor}px`;
+  clamp.style.height = `${contentHeight}px`;
+  cols.style.height = `${contentHeight}px`;
+
+  await nextAnimationFrame();
+  const pageCount = Math.max(1, Math.ceil(cols.scrollWidth / dims.colWidth));
+  return { pageCount };
 }

@@ -14,10 +14,7 @@ import {
 } from "../../reader/anchor";
 import {
   buildHostStyle,
-  setSectionContent,
   waitForContentLayout,
-  measureLogicalContentHeight,
-  nextAnimationFrame,
   initShadowHost,
 } from "../../reader/shadowHost";
 import {
@@ -26,7 +23,7 @@ import {
   createScrolledSentinel,
   getMountedScrolledSection,
 } from "./scrolled";
-import { getColDims } from "../../reader/paginated";
+import { applyPaginatedLayout, getColDims } from "../../reader/paginated";
 import { viewportsAlmostEqual } from "../../services/pageEstimation";
 
 const SCROLLED_POSITION_SAVE_DELAY_MS = 160;
@@ -442,32 +439,19 @@ export function useSectionViewer({
       };
 
       const host = hostRef.current!;
-      host.style.width = `${dims.pageWidth}px`;
-      host.style.height = `${dims.pageHeight}px`;
-
-      flow.style.display = "none";
-      clamp.style.cssText = `display:block;width:${dims.colWidth}px;height:${dims.colHeight}px;overflow:hidden;`;
-      cols.style.cssText = `column-width:${dims.colWidth}px;column-gap:0;column-fill:auto;width:${dims.colWidth}px;height:${dims.colHeight}px;`;
-      cols.style.transform = "";
-      setSectionContent(cols, section.html);
-
-      await waitForContentLayout(cols);
-      if (renderId !== paginatedRenderIdRef.current)
-        return pageCountRef.current;
-
-      const zoomFactor = zoomValue / 100;
-      const contentHeight = measureLogicalContentHeight(
+      const layout = await applyPaginatedLayout(
+        host,
+        clamp,
         cols,
-        zoomFactor,
-        dims.colHeight,
+        flow,
+        dims,
+        zoomValue,
+        section.html,
+        () => renderId !== paginatedRenderIdRef.current,
       );
-      host.style.height = `${contentHeight * zoomFactor}px`;
-      clamp.style.height = `${contentHeight}px`;
-      cols.style.height = `${contentHeight}px`;
+      if (!layout) return pageCountRef.current;
 
-      await nextAnimationFrame();
-
-      const count = Math.max(1, Math.ceil(cols.scrollWidth / dims.colWidth));
+      const count = layout.pageCount;
       const page = Math.min(Math.max(0, targetPage), count - 1);
       applyCount(count);
       applyPage(page);

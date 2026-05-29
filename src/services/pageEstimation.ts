@@ -2,14 +2,8 @@ import type { RawSection, PageViewport } from "../types/bookPages";
 import type { Theme } from "../types/storage";
 import { clampSectionIndex, normalizeAnchor } from "../utils/readingLocation";
 import { getTopmostVisibleAnchor } from "../reader/anchor";
-import { getColDims } from "../reader/paginated";
-import {
-  initShadowHost,
-  measureLogicalContentHeight,
-  nextAnimationFrame,
-  setSectionContent,
-  waitForContentLayout,
-} from "../reader/shadowHost";
+import { applyPaginatedLayout, getColDims } from "../reader/paginated";
+import { initShadowHost } from "../reader/shadowHost";
 
 /** Baseline character count used to represent a single page at 100% zoom. */
 const BASE_CHARS_PER_PAGE = 1800;
@@ -181,38 +175,27 @@ export async function measurePageMap(
     const sectionPageStarts: number[][] = [];
     const pageCounts: number[] = [];
 
-    flow.style.display = "none";
-
     for (const [index, section] of sections.entries()) {
       if (signal?.aborted) {
         throw new DOMException("Page measurement aborted", "AbortError");
       }
 
       const dims = getColDims(section.viewport, measurementViewport, zoom);
-      host.style.width = `${dims.pageWidth}px`;
-      host.style.height = `${dims.pageHeight}px`;
-      clamp.style.cssText = `display:block;width:${dims.colWidth}px;height:${dims.colHeight}px;overflow:hidden;`;
-      cols.style.cssText = `column-width:${dims.colWidth}px;column-gap:0;column-fill:auto;width:${dims.colWidth}px;height:${dims.colHeight}px;`;
-      cols.style.transform = "";
-      setSectionContent(cols, section.html);
-
-      await waitForContentLayout(cols);
-      if (signal?.aborted) {
+      const layout = await applyPaginatedLayout(
+        host,
+        clamp,
+        cols,
+        flow,
+        dims,
+        zoom,
+        section.html,
+        () => signal?.aborted ?? false,
+      );
+      if (!layout) {
         throw new DOMException("Page measurement aborted", "AbortError");
       }
 
-      const zoomFactor = zoom / 100;
-      const contentHeight = measureLogicalContentHeight(
-        cols,
-        zoomFactor,
-        dims.colHeight,
-      );
-      host.style.height = `${contentHeight * zoomFactor}px`;
-      clamp.style.height = `${contentHeight}px`;
-      cols.style.height = `${contentHeight}px`;
-
-      await nextAnimationFrame();
-      const count = Math.max(1, Math.ceil(cols.scrollWidth / dims.colWidth));
+      const count = layout.pageCount;
       const starts = [0];
       const rect = cols.getBoundingClientRect();
 
