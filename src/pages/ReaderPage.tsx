@@ -3,15 +3,12 @@ import { useLocation, useNavigate, useParams } from "react-router-dom";
 import styled from "@emotion/styled";
 import { SectionViewer, ReaderToolbar, ReaderSidebar } from "../components";
 import {
-  saveReadingState,
   loadReadingState,
   updateLastOpened,
   getBookMeta,
   getCurrentLibraryTheme,
 } from "../storage";
-import { useAppTheme } from "../styles";
-import { saveRawBook, loadRawBook } from "../storage/bookCache";
-import { extractRawBook, sectionIndexForHref } from "../services/bookExtractor";
+import { sectionIndexForHref } from "../services/bookExtractor";
 import {
   bookTitleFromUrlSegment,
   readerPathForBookTitle,
@@ -21,20 +18,21 @@ import {
   normalizeAnchor,
   normalizeSectionIndex,
 } from "../utils/readingLocation";
-import { yieldToReaderPaint } from "../utils/async";
 import {
   getEstimatedPagePosition,
   getMeasuredPagePosition,
-  measurePageMap,
   viewportsAlmostEqual,
-  type MeasuredPageMap,
 } from "../services/pageEstimation";
+import {
+  useBookExtraction,
+  usePageMap,
+  useReaderTheme,
+  useReaderPersistence,
+} from "./reader";
 import type {
-  TocItem,
   ReadingState,
   ReadingMode,
   Theme,
-  RawExtractedBook,
   PageViewport,
 } from "../types";
 
@@ -86,29 +84,25 @@ function ReaderPage() {
   );
   const [readingState, setReadingState] = useState<ReadingState | null>(null);
 
-  const [extractedBook, setExtractedBook] = useState<RawExtractedBook | null>(
-    null,
-  );
-  const [toc, setToc] = useState<TocItem[]>([]);
   const [currentSection, setCurrentSection] = useState(0);
   const [anchor, setAnchor] = useState(0);
   const [zoom, setZoom] = useState(100);
   const [mode, setMode] = useState<ReadingMode>("scrolled");
-  const [theme, setTheme] = useAppTheme(libraryTheme);
+  const { theme, toggleTheme } = useReaderTheme(libraryTheme);
+  const { saveZoom, saveMode, savePosition } = useReaderPersistence(bookId);
   const [viewerViewport, setViewerViewport] = useState<PageViewport | null>(
-    null,
-  );
-  const [measuredPages, setMeasuredPages] = useState<{
-    bookId: string | null;
-    pageMap: MeasuredPageMap;
-  } | null>(null);
-  const [extractionProgress, setExtractionProgress] = useState<string | null>(
     null,
   );
   const [loadedBookTitle, setLoadedBookTitle] = useState<{
     bookId: string;
     title: string;
   } | null>(null);
+
+  const {
+    extractedBook,
+    toc,
+    progressMessage: extractionProgress,
+  } = useBookExtraction(file, bookId);
 
   const titleFromRoute = useMemo(
     () => bookTitleFromUrlSegment(routeBookTitle),
@@ -128,19 +122,13 @@ function ReaderPage() {
     [extractedBook],
   );
 
-  const activePageMap = useMemo(() => {
-    if (!measuredPages || !viewerViewport) return null;
-    const { pageMap } = measuredPages;
-
-    if (measuredPages.bookId !== bookId) return null;
-    if (pageMap.zoom !== zoom) return null;
-    if (pageMap.pageCounts.length !== sectionTextLengths.length) return null;
-    if (!viewportsAlmostEqual(pageMap.viewport, viewerViewport)) {
-      return null;
-    }
-
-    return pageMap;
-  }, [bookId, measuredPages, sectionTextLengths.length, viewerViewport, zoom]);
+  const activePageMap = usePageMap(
+    extractedBook,
+    viewerViewport,
+    zoom,
+    theme,
+    bookId,
+  );
 
   const pagePosition = useMemo(
     () =>
@@ -204,112 +192,6 @@ function ReaderPage() {
     };
   }, [bookId]);
 
-  useEffect(() => {
-    if (!extractedBook || !viewerViewport) {
-      return;
-    }
-
-    let cancelled = false;
-    const controller = new AbortController();
-
-    measurePageMap(
-      extractedBook.sections,
-      zoom,
-      viewerViewport,
-      theme,
-      controller.signal,
-    )
-      .then((nextPageMap) => {
-        if (!cancelled) setMeasuredPages({ bookId, pageMap: nextPageMap });
-      })
-      .catch((error: unknown) => {
-        if (controller.signal.aborted) return;
-        console.warn("Failed to measure page map:", error);
-      });
-
-    return () => {
-      cancelled = true;
-      controller.abort();
-    };
-  }, [bookId, extractedBook, theme, viewerViewport, zoom]);
-
-  // Extract book when file is available
-  useEffect(() => {
-    if (!file || !bookId) return;
-    let cancelled = false;
-    const controller = new AbortController();
-
-    const run = async () => {
-      // Try cache first
-      try {
-        const cached = await loadRawBook(bookId, (done, total, message) => {
-          if (!cancelled) {
-            setExtractionProgress(
-              message ?? `Loading cached book... ${done} / ${total}`,
-            );
-          }
-        });
-        if (cached) {
-          if (!cancelled) {
-            setExtractedBook(cached);
-            setToc(cached.toc);
-            setExtractionProgress(null);
-          }
-          return;
-        }
-
-        if (cancelled) return;
-
-        // Full extraction
-        setExtractionProgress("Extracting book...");
-        const fileData = await file.arrayBuffer();
-        if (cancelled) return;
-
-        const result = await extractRawBook(
-          fileData,
-          bookId,
-          (done, total, message) => {
-            if (!cancelled) {
-              setExtractionProgress(
-                message ??
-                  (total > 0
-                    ? `Extracting... ${done} / ${total} sections`
-                    : "Extracting book..."),
-              );
-            }
-          },
-          controller.signal,
-        );
-
-        if (cancelled) return;
-
-        setExtractedBook(result);
-        setToc(result.toc);
-        setExtractionProgress(null);
-
-        void (async () => {
-          await yieldToReaderPaint();
-          try {
-            await saveRawBook(result);
-          } catch (e) {
-            console.warn("Failed to cache book:", e);
-          }
-        })();
-      } catch (e) {
-        if (controller.signal.aborted) {
-          return;
-        }
-        throw e;
-      }
-    };
-
-    run();
-    return () => {
-      cancelled = true;
-      controller.abort();
-    };
-  }, [file, bookId]);
-
   // Persist position changes reported by SectionViewer
   const handlePositionChange = useCallback(
     (pos: { sectionIndex: number; anchor: number }) => {
@@ -319,11 +201,9 @@ function ReaderPage() {
       };
       setCurrentSection(nextPosition.sectionIndex);
       setAnchor(nextPosition.anchor);
-      if (bookId) {
-        saveReadingState(bookId, { lastLocation: nextPosition });
-      }
+      savePosition(nextPosition);
     },
-    [bookId],
+    [savePosition],
   );
 
   // Track section navigation (section-boundary crossing, scrolled sentinels)
@@ -355,33 +235,29 @@ function ReaderPage() {
     () =>
       setZoom((z) => {
         const next = Math.min(z + 10, 400);
-        if (bookId) saveReadingState(bookId, { zoom: next });
+        saveZoom(next);
         return next;
       }),
-    [bookId],
+    [saveZoom],
   );
   const zoomOut = useCallback(
     () =>
       setZoom((z) => {
         const next = Math.max(z - 10, 20);
-        if (bookId) saveReadingState(bookId, { zoom: next });
+        saveZoom(next);
         return next;
       }),
-    [bookId],
+    [saveZoom],
   );
 
   const handleModeChange = useCallback(
     (e: React.ChangeEvent<HTMLSelectElement>) => {
       const newMode = e.target.value as ReadingMode;
       setMode(newMode);
-      if (bookId) saveReadingState(bookId, { mode: newMode });
+      saveMode(newMode);
     },
-    [bookId],
+    [saveMode],
   );
-
-  const toggleTheme = useCallback(() => {
-    setTheme((t) => (t === "light" ? "dark" : "light"));
-  }, [setTheme]);
 
   const handleBackToLibrary = useCallback(() => {
     navigate("/");
