@@ -1,6 +1,11 @@
 import styled from "@emotion/styled";
 import type { ReadingMode, Theme } from "../../types";
 
+// The toolbar intentionally uses bespoke, borderless controls (transparent
+// background, larger glyphs) rather than the shared `ui/Button`/`IconButton`
+// primitives, which are bordered, fixed-height surface buttons meant for
+// library/dialog actions. Keeping these local avoids overloading the shared
+// Button with a divergent "toolbar" variant.
 const Toolbar = styled.div`
   width: 100%;
   display: flex;

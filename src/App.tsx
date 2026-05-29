@@ -1,13 +1,16 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { HomePage, ReaderPage } from "./pages";
+import ErrorBoundary from "./components/ErrorBoundary";
 
 function App() {
   return (
     <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<HomePage />} />
-        <Route path="/reader/:bookTitle" element={<ReaderPage />} />
-      </Routes>
+      <ErrorBoundary>
+        <Routes>
+          <Route path="/" element={<HomePage />} />
+          <Route path="/reader/:bookTitle" element={<ReaderPage />} />
+        </Routes>
+      </ErrorBoundary>
     </BrowserRouter>
   );
 }
