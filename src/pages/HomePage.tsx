@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import styled from "@emotion/styled";
 import { useNavigate } from "react-router-dom";
-import { BookCard, FilePicker, Button, IconButton } from "../components";
+import { BookCard, FilePicker, Button, IconButton, useDialogs } from "../components";
 import {
   getAllBooks,
   addBookToLibrary,
@@ -84,6 +84,7 @@ function HomePage() {
   const [isAdding, setIsAdding] = useState(false);
   const [isClearingCache, setIsClearingCache] = useState(false);
   const [theme, setTheme] = useAppTheme();
+  const { confirm, alert, dialog } = useDialogs();
 
   const sortByTitle = useCallback(
     (list: BookMeta[]) =>
@@ -138,28 +139,34 @@ function HomePage() {
     [navigate, theme],
   );
 
-  const handleRemoveBook = useCallback(async (book: BookMeta) => {
-    if (confirm(`Remove "${book.title}" from your library?`)) {
-      await removeBookFromLibrary(book.id);
-      setBooks((prev) => prev.filter((b) => b.id !== book.id));
-    }
-  }, []);
+  const handleRemoveBook = useCallback(
+    async (book: BookMeta) => {
+      if (await confirm(`Remove "${book.title}" from your library?`)) {
+        await removeBookFromLibrary(book.id);
+        setBooks((prev) => prev.filter((b) => b.id !== book.id));
+      }
+    },
+    [confirm],
+  );
 
-  const handleClearCache = useCallback(async (book: BookMeta) => {
-    if (
-      confirm(
-        `Clear the extraction cache for "${book.title}"? It will be re-extracted on next open.`,
-      )
-    ) {
-      await deleteRawBook(book.id);
-    }
-  }, []);
+  const handleClearCache = useCallback(
+    async (book: BookMeta) => {
+      if (
+        await confirm(
+          `Clear the extraction cache for "${book.title}"? It will be re-extracted on next open.`,
+        )
+      ) {
+        await deleteRawBook(book.id);
+      }
+    },
+    [confirm],
+  );
 
   const handleClearCachedBooks = useCallback(async () => {
     if (
-      !confirm(
+      !(await confirm(
         "Clear all cached extracted books? Books stay in your library, but they will be re-extracted on next open.",
-      )
+      ))
     ) {
       return;
     }
@@ -169,7 +176,7 @@ function HomePage() {
       await clearAllRawBooks();
       await loadLibrary();
     } catch (error) {
-      alert(
+      await alert(
         error instanceof Error
           ? error.message
           : "Failed to clear cached books.",
@@ -177,7 +184,7 @@ function HomePage() {
     } finally {
       setIsClearingCache(false);
     }
-  }, [loadLibrary]);
+  }, [loadLibrary, confirm, alert]);
 
   if (isLoading) {
     return (
@@ -234,6 +241,7 @@ function HomePage() {
           ))}
         </LibraryGrid>
       )}
+      {dialog}
     </Container>
   );
 }

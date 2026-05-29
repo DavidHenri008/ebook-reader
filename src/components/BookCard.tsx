@@ -91,9 +91,8 @@ const ActionOverlay = styled.div`
   pointer-events: none;
 `;
 
-const RemoveButton = styled.button`
+const ActionButton = styled.button`
   position: absolute;
-  top: 4px;
   right: 4px;
   width: 24px;
   height: 24px;
@@ -109,10 +108,6 @@ const RemoveButton = styled.button`
   display: flex;
   align-items: center;
   justify-content: center;
-
-  &:hover {
-    background-color: var(--danger);
-  }
 
   &:focus-visible {
     opacity: 1;
@@ -121,33 +116,19 @@ const RemoveButton = styled.button`
   }
 `;
 
-const ClearCacheButton = styled.button`
-  position: absolute;
+const RemoveButton = styled(ActionButton)`
+  top: 4px;
+
+  &:hover {
+    background-color: var(--danger);
+  }
+`;
+
+const ClearCacheButton = styled(ActionButton)`
   bottom: 4px;
-  right: 4px;
-  width: 24px;
-  height: 24px;
-  border: none;
-  border-radius: 50%;
-  background-color: var(--overlay-strong);
-  color: white;
-  font-size: 14px;
-  cursor: pointer;
-  opacity: 0;
-  pointer-events: auto;
-  transition: opacity 0.2s;
-  display: flex;
-  align-items: center;
-  justify-content: center;
 
   &:hover {
     background-color: var(--info);
-  }
-
-  &:focus-visible {
-    opacity: 1;
-    outline: 2px solid var(--accent);
-    outline-offset: 2px;
   }
 `;
 //#endregion
