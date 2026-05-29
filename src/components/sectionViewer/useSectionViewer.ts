@@ -27,6 +27,7 @@ import {
   getMountedScrolledSection,
 } from "./scrolled";
 import { getColDims } from "../../reader/paginated";
+import { viewportsAlmostEqual } from "../../services/pageEstimation";
 
 const SCROLLED_POSITION_SAVE_DELAY_MS = 160;
 
@@ -143,11 +144,7 @@ export function useSectionViewer({
     if (rect.width <= 0 || rect.height <= 0) return;
 
     const previous = reportedViewportRef.current;
-    if (
-      previous &&
-      Math.abs(previous.width - rect.width) < 0.5 &&
-      Math.abs(previous.height - rect.height) < 0.5
-    ) {
+    if (previous && viewportsAlmostEqual(previous, rect)) {
       return;
     }
 
@@ -863,11 +860,7 @@ export function useSectionViewer({
         if (modeRef.current === "paginated") {
           const rect = wrapper.getBoundingClientRect();
           const last = lastPaginatedViewportRef.current;
-          if (
-            last &&
-            Math.abs(last.width - rect.width) < 0.5 &&
-            Math.abs(last.height - rect.height) < 0.5
-          ) {
+          if (last && viewportsAlmostEqual(last, rect)) {
             return;
           }
           renderPaginated(sectionRef.current, zoomRef.current, 0).then(() => {

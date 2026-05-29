@@ -9,12 +9,10 @@ import {
   getBookFile,
   deleteRawBook,
   clearAllRawBooks,
-  getCurrentLibraryTheme,
-  THEME_STORAGE_KEY,
 } from "../storage";
+import { useAppTheme } from "../styles";
 import { readerPathForBookTitle } from "../utils/bookTitleUrl";
 import type { BookMeta } from "../types";
-import type { Theme } from "../types";
 
 //#region Styled Components
 const Container = styled.div`
@@ -146,7 +144,7 @@ function HomePage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isAdding, setIsAdding] = useState(false);
   const [isClearingCache, setIsClearingCache] = useState(false);
-  const [theme, setTheme] = useState<Theme>(() => getCurrentLibraryTheme());
+  const [theme, setTheme] = useAppTheme();
 
   const sortByTitle = useCallback(
     (list: BookMeta[]) =>
@@ -154,14 +152,9 @@ function HomePage() {
     [],
   );
 
-  useEffect(() => {
-    document.documentElement.dataset.theme = theme;
-    localStorage.setItem(THEME_STORAGE_KEY, theme);
-  }, [theme]);
-
   const toggleTheme = useCallback(() => {
     setTheme((t) => (t === "light" ? "dark" : "light"));
-  }, []);
+  }, [setTheme]);
 
   const loadLibrary = useCallback(async () => {
     setIsLoading(true);

@@ -8,8 +8,8 @@ import {
   updateLastOpened,
   getBookMeta,
   getCurrentLibraryTheme,
-  THEME_STORAGE_KEY,
 } from "../storage";
+import { useAppTheme } from "../styles";
 import { saveRawBook, loadRawBook } from "../storage/bookCache";
 import { extractRawBook, sectionIndexForHref } from "../services/bookExtractor";
 import {
@@ -26,6 +26,7 @@ import {
   getEstimatedPagePosition,
   getMeasuredPagePosition,
   measurePageMap,
+  viewportsAlmostEqual,
   type MeasuredPageMap,
 } from "../services/pageEstimation";
 import type {
@@ -258,7 +259,7 @@ function ReaderPage() {
   const [anchor, setAnchor] = useState(0);
   const [zoom, setZoom] = useState(100);
   const [mode, setMode] = useState<ReadingMode>("scrolled");
-  const [theme, setTheme] = useState<Theme>(() => libraryTheme);
+  const [theme, setTheme] = useAppTheme(libraryTheme);
   const [viewerViewport, setViewerViewport] = useState<PageViewport | null>(
     null,
   );
@@ -299,10 +300,7 @@ function ReaderPage() {
     if (measuredPages.bookId !== bookId) return null;
     if (pageMap.zoom !== zoom) return null;
     if (pageMap.pageCounts.length !== sectionTextLengths.length) return null;
-    if (
-      Math.abs(pageMap.viewport.width - viewerViewport.width) >= 0.5 ||
-      Math.abs(pageMap.viewport.height - viewerViewport.height) >= 0.5
-    ) {
+    if (!viewportsAlmostEqual(pageMap.viewport, viewerViewport)) {
       return null;
     }
 
@@ -370,12 +368,7 @@ function ReaderPage() {
     return () => {
       cancelled = true;
     };
-  }, [bookId, libraryTheme]);
-
-  // Apply explicit theme to document root so global CSS vars override the media query
-  useEffect(() => {
-    document.documentElement.dataset.theme = theme;
-  }, [theme]);
+  }, [bookId, libraryTheme, setTheme]);
 
   useEffect(() => {
     if (!extractedBook || !viewerViewport) {
@@ -506,11 +499,7 @@ function ReaderPage() {
 
   const handleViewportChange = useCallback((viewport: PageViewport) => {
     setViewerViewport((previous) => {
-      if (
-        previous &&
-        Math.abs(previous.width - viewport.width) < 0.5 &&
-        Math.abs(previous.height - viewport.height) < 0.5
-      ) {
+      if (previous && viewportsAlmostEqual(previous, viewport)) {
         return previous;
       }
 
@@ -560,10 +549,9 @@ function ReaderPage() {
     setTheme((t) => {
       const next: Theme = t === "light" ? "dark" : "light";
       if (bookId) saveReadingState(bookId, { theme: next });
-      localStorage.setItem(THEME_STORAGE_KEY, next);
       return next;
     });
-  }, [bookId]);
+  }, [bookId, setTheme]);
 
   const handleBackToLibrary = useCallback(() => {
     navigate("/");
