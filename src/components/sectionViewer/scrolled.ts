@@ -5,6 +5,25 @@
 
 import type { RawSection } from "../../types";
 import { setSectionContent } from "../../reader/shadowHost";
+import { getTopmostVisibleSection } from "../../reader/anchor";
+
+/**
+ * Topmost section element currently intersecting the viewport, plus its
+ * section index. Shared by the hook's `readVisiblePosition` and the scrolled
+ * controller's viewport tracking.
+ */
+export function readTopmostVisibleSection(
+  contentRoot: Element,
+  viewTop: number,
+  viewBottom: number,
+): { element: HTMLElement; index: number } | null {
+  const element = getTopmostVisibleSection(contentRoot, viewTop, viewBottom);
+  const index = Number(element?.dataset.sectionIndex);
+  if (element && Number.isFinite(index)) {
+    return { element, index };
+  }
+  return null;
+}
 
 /**
  * Looks up a section by index.

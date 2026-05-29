@@ -6,32 +6,23 @@
 import { useRef, useEffect, useCallback, useState } from "react";
 import type { RawSection, PageViewport } from "../../types/bookPages";
 import type { Theme } from "../../types/storage";
-import {
-  scheduleIdle,
-  getTopmostVisibleAnchor,
-  findNodeAtOffset,
-  getTopmostVisibleSection,
-} from "../../reader/anchor";
+import { scheduleIdle, getTopmostVisibleAnchor } from "../../reader/anchor";
 import {
   buildHostStyle,
-  waitForContentLayout,
   initShadowHost,
   applyBookStyles,
 } from "../../reader/shadowHost";
-import {
-  lookupSection,
-  createScrolledSection,
-  createScrolledSentinel,
-  getMountedScrolledSection,
-} from "./scrolled";
-import {
-  applyPaginatedLayout,
-  getColDims,
-  pageForAnchorRect,
-} from "../../reader/paginated";
+import { readTopmostVisibleSection } from "./scrolled";
 import { viewportsAlmostEqual } from "../../reader/viewport";
-
-const SCROLLED_POSITION_SAVE_DELAY_MS = 160;
+import type { ViewerControllerContext } from "../../reader/viewerControllerContext";
+import {
+  createPaginatedController,
+  type PaginatedController,
+} from "../../reader/paginatedController";
+import {
+  createScrolledController,
+  type ScrolledController,
+} from "./scrolledController";
 
 export interface SectionViewerProps {
   sections: RawSection[];
@@ -57,19 +48,7 @@ interface UseSectionViewerResult {
 }
 
 // Topmost section element currently intersecting the viewport, plus its
-// section index. Shared by readVisiblePosition and the scroll handler.
-function readTopmostVisibleSection(
-  contentRoot: Element,
-  viewTop: number,
-  viewBottom: number,
-): { element: HTMLElement; index: number } | null {
-  const element = getTopmostVisibleSection(contentRoot, viewTop, viewBottom);
-  const index = Number(element?.dataset.sectionIndex);
-  if (element && Number.isFinite(index)) {
-    return { element, index };
-  }
-  return null;
-}
+// section index, is provided by `readTopmostVisibleSection` from `./scrolled`.
 
 export function useSectionViewer({
   sections,
@@ -141,6 +120,12 @@ export function useSectionViewer({
 
   // ── Mount guard (used by the combined prop-change effect) ───────────────
   const mountedRef = useRef(false);
+
+  // ── Live sections mirror (read by the controllers) ─────────────────────
+  const sectionsRef = useRef(sections);
+  useEffect(() => {
+    sectionsRef.current = sections;
+  }, [sections]);
 
   // ── Stable callback mirrors ─────────────────────────────────────────────
   const onNavigateRef = useRef(onNavigate);
@@ -323,134 +308,76 @@ export function useSectionViewer({
     if (position) commitPosition(position, { defer: false });
   }, [readVisiblePosition, commitPosition]);
 
-  const cancelPendingScrolledWork = useCallback(() => {
-    if (scrollFrameRef.current !== null) {
-      cancelAnimationFrame(scrollFrameRef.current);
-      scrollFrameRef.current = null;
-    }
+  // ── Controller context + engines ─────────────────────────────────────────
+  // The hook owns React state/refs and the shared anchor save/restore glue; the
+  // paginated and scrolled engines read and mutate this shared context. Created
+  // once via lazy state initializers — every member is stable across renders.
+  const [ctx] = useState<ViewerControllerContext>(() => ({
+    hostRef,
+    wrapperRef,
+    clampRef,
+    colsRef,
+    flowRef,
+    sectionRef,
+    modeRef,
+    zoomRef,
+    pageRef,
+    pageCountRef,
+    paginatedRenderIdRef,
+    sectionViewportRef,
+    lastPaginatedViewportRef,
+    scrolledRenderIdRef,
+    mountedRangeRef,
+    topSentinelRef,
+    bottomSentinelRef,
+    scrollFrameRef,
+    scrolledPositionSaveTimerRef,
+    intersectObserverRef,
+    idleHandleRef,
+    onNavigateRef,
+    getSections: () => sectionsRef.current,
+    applyPage,
+    applyCount,
+    ensureShadow,
+    saveAnchor,
+    flushAnchor,
+  }));
 
-    if (scrolledPositionSaveTimerRef.current) {
-      clearTimeout(scrolledPositionSaveTimerRef.current);
-      scrolledPositionSaveTimerRef.current = null;
-    }
-  }, []);
+  const [paginated] = useState<PaginatedController>(() =>
+    createPaginatedController(ctx),
+  );
+  const [scrolled] = useState<ScrolledController>(() =>
+    createScrolledController(ctx),
+  );
+
+  // ── Scrolled-engine delegators (referenced by effects) ───────────────────
+
+  const cancelPendingScrolledWork = useCallback(() => {
+    scrolled.cancelPendingWork();
+  }, [scrolled]);
 
   const updateScrolledSectionFromViewport = useCallback(() => {
-    const wrapper = wrapperRef.current;
-    const contentRoot = flowRef.current;
-    if (!wrapper || !contentRoot || modeRef.current !== "scrolled") return;
-
-    if (mountedRangeRef.current.first === 0 && wrapper.scrollTop <= 2) {
-      if (sectionRef.current !== 0) {
-        sectionRef.current = 0;
-        onNavigateRef.current?.(0);
-      }
-      return;
-    }
-
-    const rect = wrapper.getBoundingClientRect();
-    const visible = readTopmostVisibleSection(
-      contentRoot,
-      rect.top,
-      rect.bottom,
-    );
-
-    if (visible && visible.index !== sectionRef.current) {
-      sectionRef.current = visible.index;
-      onNavigateRef.current?.(visible.index);
-    }
-  }, []);
+    scrolled.updateSectionFromViewport();
+  }, [scrolled]);
 
   const scheduleScrolledPositionSave = useCallback(() => {
-    if (scrolledPositionSaveTimerRef.current) {
-      clearTimeout(scrolledPositionSaveTimerRef.current);
-    }
+    scrolled.schedulePositionSave();
+  }, [scrolled]);
 
-    scrolledPositionSaveTimerRef.current = setTimeout(() => {
-      scrolledPositionSaveTimerRef.current = null;
-      saveAnchor();
-    }, SCROLLED_POSITION_SAVE_DELAY_MS);
-  }, [saveAnchor]);
-
+  // Dispatches anchor restore to the active mode's controller.
   const restoreAnchor = useCallback(
     (
       targetAnchor: number,
       targetMode: "paginated" | "scrolled",
       targetZoom: number,
     ) => {
-      const contentRoot =
-        targetMode === "paginated" ? colsRef.current : flowRef.current;
-      if (!contentRoot) return;
-
-      if (targetAnchor <= 0) {
-        if (targetMode === "paginated") {
-          const cols = colsRef.current;
-          if (cols) {
-            applyPage(0);
-            cols.style.transform = "translateX(0)";
-          }
-        } else {
-          const targetSection = getMountedScrolledSection(
-            contentRoot,
-            sectionRef.current,
-          );
-          if (sectionRef.current === 0) {
-            wrapperRef.current?.scrollTo({ top: 0, behavior: "instant" });
-          } else if (targetSection) {
-            targetSection.scrollIntoView({
-              block: "start",
-              behavior: "instant" as ScrollBehavior,
-            });
-          } else {
-            wrapperRef.current?.scrollTo({ top: 0, behavior: "instant" });
-          }
-        }
-        return;
-      }
-
-      const searchRoot =
-        targetMode === "scrolled"
-          ? (getMountedScrolledSection(contentRoot, sectionRef.current) ??
-            contentRoot)
-          : contentRoot;
-      const found =
-        findNodeAtOffset(searchRoot, targetAnchor) ??
-        (searchRoot === contentRoot
-          ? null
-          : findNodeAtOffset(contentRoot, targetAnchor));
-      if (!found) return;
-
       if (targetMode === "paginated") {
-        const cols = colsRef.current!;
-        cols.style.transform = "";
-
-        const range = document.createRange();
-        range.setStart(found.node, found.offsetInNode);
-        range.collapse(true);
-        const rects = range.getClientRects();
-        if (rects.length === 0) return;
-
-        const host = hostRef.current!;
-        const dims = getColDims(
-          sectionViewportRef.current,
-          wrapperRef.current,
-          targetZoom,
-        );
-        const page = pageForAnchorRect(host, dims, rects[0]);
-        const clamped = Math.min(page, pageCountRef.current - 1);
-        applyPage(clamped);
-        cols.style.transform = `translateX(-${clamped * dims.colWidth}px)`;
+        paginated.restore(targetAnchor, targetZoom);
       } else {
-        const el = found.node.parentElement;
-        if (el) {
-          el.scrollIntoView({
-            block: "start",
-            behavior: "instant" as ScrollBehavior,
-          });
-        }
+        scrolled.restore(targetAnchor);
       }
     },
-    [applyPage],
+    [paginated, scrolled],
   );
 
   // Restores the given anchor on the next animation frame. Used after a render
@@ -470,47 +397,12 @@ export function useSectionViewer({
 
   // ── Paginated render ─────────────────────────────────────────────────────
 
+  // ── Paginated render ─────────────────────────────────────────────────────
+
   const renderPaginated = useCallback(
-    async (
-      sIdx: number,
-      zoomValue: number,
-      targetPage: number,
-    ): Promise<number> => {
-      const renderId = paginatedRenderIdRef.current + 1;
-      paginatedRenderIdRef.current = renderId;
-
-      const { clamp, cols, flow } = ensureShadow();
-      const section = lookupSection(sections, sIdx);
-      if (!section) return 1;
-
-      sectionViewportRef.current = section.viewport;
-      const dims = getColDims(section.viewport, wrapperRef.current, zoomValue);
-      lastPaginatedViewportRef.current = {
-        width: dims.colWidth,
-        height: dims.colHeight,
-      };
-
-      const host = hostRef.current!;
-      const layout = await applyPaginatedLayout(
-        host,
-        clamp,
-        cols,
-        flow,
-        dims,
-        zoomValue,
-        section.html,
-        () => renderId !== paginatedRenderIdRef.current,
-      );
-      if (!layout) return pageCountRef.current;
-
-      const count = layout.pageCount;
-      const page = Math.min(Math.max(0, targetPage), count - 1);
-      applyCount(count);
-      applyPage(page);
-      cols.style.transform = `translateX(-${page * dims.colWidth}px)`;
-      return count;
-    },
-    [ensureShadow, sections, applyCount, applyPage],
+    (sIdx: number, zoomValue: number, targetPage: number): Promise<number> =>
+      paginated.render(sIdx, zoomValue, targetPage),
+    [paginated],
   );
 
   // Renders a paginated section from its first page, then restores the target
@@ -524,229 +416,35 @@ export function useSectionViewer({
     [renderPaginated, restoreOnNextFrame],
   );
 
-  // Column dimensions for the live paginated state (current section viewport,
-  // wrapper, and zoom). Used by the paginated navigation handlers.
-  const currentColDims = useCallback(
-    () =>
-      getColDims(
-        sectionViewportRef.current,
-        wrapperRef.current,
-        zoomRef.current,
-      ),
-    [],
-  );
-
-  // ── Scrolled render + helpers ────────────────────────────────────────────
+  // ── Scrolled render (referenced by effects) ──────────────────────────────
 
   const teardownScrolled = useCallback(
     (flushPosition = false) => {
-      if (flushPosition) flushAnchor();
-      cancelPendingScrolledWork();
-      intersectObserverRef.current?.disconnect();
-      intersectObserverRef.current = null;
-      topSentinelRef.current = null;
-      bottomSentinelRef.current = null;
-      idleHandleRef.current?.cancel();
-      idleHandleRef.current = null;
-      flowRef.current?.replaceChildren();
-      mountedRangeRef.current = {
-        first: sectionRef.current,
-        last: sectionRef.current,
-      };
+      scrolled.teardown(flushPosition);
     },
-    [cancelPendingScrolledWork, flushAnchor],
+    [scrolled],
   );
 
-  const mountPreviousScrolledSection = useCallback((): boolean => {
-    const range = mountedRangeRef.current;
-    if (range.first <= 0) return false;
-
-    const prevIdx = range.first - 1;
-    const prevSection = lookupSection(sections, prevIdx);
-    const topSentinel = topSentinelRef.current;
-    const wrapper = wrapperRef.current;
-    if (!prevSection || !topSentinel || !wrapper) return false;
-
-    const previousScrollHeight = wrapper.scrollHeight;
-    topSentinel.after(createScrolledSection(prevSection, prevIdx));
-    mountedRangeRef.current = { ...range, first: prevIdx };
-
-    const heightDelta = wrapper.scrollHeight - previousScrollHeight;
-    if (heightDelta > 0) wrapper.scrollTop += heightDelta;
-    return true;
-  }, [sections]);
-
-  const mountNextScrolledSection = useCallback((): boolean => {
-    const range = mountedRangeRef.current;
-    if (range.last >= sections.length - 1) return false;
-
-    const nextIdx = range.last + 1;
-    const nextSection = lookupSection(sections, nextIdx);
-    const bottomSentinel = bottomSentinelRef.current;
-    if (!nextSection || !bottomSentinel) return false;
-
-    bottomSentinel.before(createScrolledSection(nextSection, nextIdx));
-    mountedRangeRef.current = { ...range, last: nextIdx };
-    return true;
-  }, [sections]);
-
   const ensureScrolledRangeAroundViewport = useCallback(() => {
-    const wrapper = wrapperRef.current;
-    if (!wrapper || modeRef.current !== "scrolled") return;
-
-    const threshold = Math.max(240, wrapper.clientHeight * 0.75);
-
-    while (
-      wrapper.scrollHeight - wrapper.scrollTop - wrapper.clientHeight <
-        threshold &&
-      mountedRangeRef.current.last < sections.length - 1 &&
-      mountNextScrolledSection()
-    ) {
-      // fill short sections until the user can keep scrolling
-    }
-
-    while (
-      wrapper.scrollTop < threshold &&
-      mountedRangeRef.current.first > 0 &&
-      mountPreviousScrolledSection()
-    ) {
-      // preserve scrollTop as content is added above
-    }
-  }, [mountNextScrolledSection, mountPreviousScrolledSection, sections.length]);
+    scrolled.ensureRangeAroundViewport();
+  }, [scrolled]);
 
   const renderScrolled = useCallback(
     (sIdx: number) => {
-      const renderId = scrolledRenderIdRef.current + 1;
-      scrolledRenderIdRef.current = renderId;
-
-      teardownScrolled();
-
-      const { clamp, flow } = ensureShadow();
-      clamp.style.display = "none";
-      const host = hostRef.current!;
-      host.style.width = "100%";
-      host.style.height = "auto";
-      host.style.minHeight = "100%";
-      host.style.position = "relative";
-      flow.style.cssText =
-        "display:block;width:100%;position:relative;overflow:visible;";
-
-      mountedRangeRef.current = { first: sIdx, last: sIdx };
-
-      const section = lookupSection(sections, sIdx);
-      if (!section) return;
-
-      const topSentinel = createScrolledSentinel("top");
-      const bottomSentinel = createScrolledSentinel("bottom");
-      topSentinelRef.current = topSentinel;
-      bottomSentinelRef.current = bottomSentinel;
-
-      flow.appendChild(topSentinel);
-      flow.appendChild(createScrolledSection(section, sIdx));
-      flow.appendChild(bottomSentinel);
-
-      requestAnimationFrame(() => {
-        applyCount(1);
-        applyPage(0);
-      });
-
-      const observer = new IntersectionObserver(
-        (entries) => {
-          if (renderId !== scrolledRenderIdRef.current) return;
-          let mounted = false;
-          entries.forEach((entry) => {
-            if (!entry.isIntersecting) return;
-            const sentinel = entry.target as HTMLDivElement;
-            if (sentinel.dataset.sentinel === "top") {
-              mounted = mountPreviousScrolledSection() || mounted;
-            } else if (sentinel.dataset.sentinel === "bottom") {
-              mounted = mountNextScrolledSection() || mounted;
-            }
-          });
-          if (mounted) {
-            requestAnimationFrame(() => {
-              ensureScrolledRangeAroundViewport();
-              updateScrolledSectionFromViewport();
-            });
-            scheduleScrolledPositionSave();
-          }
-        },
-        { root: wrapperRef.current, rootMargin: "600px 0px" },
-      );
-      observer.observe(topSentinel);
-      observer.observe(bottomSentinel);
-      intersectObserverRef.current = observer;
-
-      requestAnimationFrame(() => {
-        if (renderId === scrolledRenderIdRef.current) {
-          ensureScrolledRangeAroundViewport();
-        }
-      });
-      void waitForContentLayout(flow).then(() => {
-        if (renderId === scrolledRenderIdRef.current) {
-          ensureScrolledRangeAroundViewport();
-        }
-      });
+      scrolled.render(sIdx);
     },
-    [
-      teardownScrolled,
-      ensureShadow,
-      sections,
-      applyCount,
-      applyPage,
-      mountPreviousScrolledSection,
-      mountNextScrolledSection,
-      ensureScrolledRangeAroundViewport,
-      updateScrolledSectionFromViewport,
-      scheduleScrolledPositionSave,
-    ],
+    [scrolled],
   );
 
   // ── Paginated navigation ─────────────────────────────────────────────────
 
   const navigatePrev = useCallback(() => {
-    if (modeRef.current !== "paginated") return;
-    const cols = colsRef.current;
-    if (!cols) return;
-    const dims = currentColDims();
-
-    if (pageRef.current > 0) {
-      const newPage = pageRef.current - 1;
-      applyPage(newPage);
-      cols.style.transform = `translateX(-${newPage * dims.colWidth}px)`;
-      saveAnchor();
-    } else if (sectionRef.current > 0) {
-      const prev = sectionRef.current - 1;
-      sectionRef.current = prev;
-      renderPaginated(prev, zoomRef.current, 99999).then((count) => {
-        const lastPage = count - 1;
-        const d = currentColDims();
-        applyPage(lastPage);
-        cols.style.transform = `translateX(-${lastPage * d.colWidth}px)`;
-        saveAnchor();
-      });
-      onNavigateRef.current?.(prev);
-    }
-  }, [applyPage, saveAnchor, renderPaginated, currentColDims]);
+    paginated.navigatePrev();
+  }, [paginated]);
 
   const navigateNext = useCallback(() => {
-    if (modeRef.current !== "paginated") return;
-    const cols = colsRef.current;
-    if (!cols) return;
-    const dims = currentColDims();
-
-    if (pageRef.current < pageCountRef.current - 1) {
-      const newPage = pageRef.current + 1;
-      applyPage(newPage);
-      cols.style.transform = `translateX(-${newPage * dims.colWidth}px)`;
-      saveAnchor();
-    } else if (sectionRef.current < sections.length - 1) {
-      const next = sectionRef.current + 1;
-      sectionRef.current = next;
-      renderPaginated(next, zoomRef.current, 0).then(() => saveAnchor());
-      onNavigateRef.current?.(next);
-    }
-  }, [applyPage, saveAnchor, renderPaginated, sections.length, currentColDims]);
+    paginated.navigateNext();
+  }, [paginated]);
 
   // ── Keyboard navigation ──────────────────────────────────────────────────
 
