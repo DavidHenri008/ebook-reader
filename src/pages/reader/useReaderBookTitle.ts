@@ -1,35 +1,29 @@
 import { useEffect, useMemo, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useNavigate } from "@tanstack/react-router";
 import { getBookMeta } from "../../storage";
-import {
-  bookTitleFromUrlSegment,
-  readerPathForBookTitle,
-} from "../../utils/bookTitleUrl";
 
 interface ReaderBookTitleResult {
   bookTitle: string;
-  canonicalReaderPath: string | null;
 }
 
 /**
  * Resolves the reader's display title and keeps the URL on its canonical
- * `/reader/:bookTitle` path.
+ * `/reader/$bookTitle` path.
  *
  * Title priority: the navigation state title, then the stored library
  * metadata title, then the title decoded from the URL slug. When a title is
- * known and the current path differs from the canonical reader path, the URL
- * is replaced (preserving navigation state).
+ * known and the current slug differs from the canonical one, the URL is
+ * replaced (preserving navigation state).
  *
  * @param bookId - Current book id, or `null` when none is loaded.
  * @param locationBookTitle - Title supplied via navigation state, if any.
- * @param routeBookTitle - Raw `:bookTitle` URL segment, if any.
+ * @param routeBookTitle - Decoded `$bookTitle` URL param, if any.
  */
 export function useReaderBookTitle(
   bookId: string | null,
   locationBookTitle: string | undefined,
   routeBookTitle: string | undefined,
 ): ReaderBookTitleResult {
-  const location = useLocation();
   const navigate = useNavigate();
 
   const [loadedBookTitle, setLoadedBookTitle] = useState<{
@@ -52,26 +46,27 @@ export function useReaderBookTitle(
     };
   }, [bookId, locationBookTitle]);
 
-  const titleFromRoute = useMemo(
-    () => bookTitleFromUrlSegment(routeBookTitle),
-    [routeBookTitle],
-  );
+  const titleFromRoute = useMemo(() => {
+    const trimmed = routeBookTitle?.trim();
+    return trimmed && trimmed.length > 0 ? trimmed : null;
+  }, [routeBookTitle]);
   const storedBookTitle =
     loadedBookTitle?.bookId === bookId ? loadedBookTitle.title : null;
   const bookTitle =
     locationBookTitle ?? storedBookTitle ?? titleFromRoute ?? "";
-  const canonicalReaderPath = useMemo(
-    () => (bookTitle ? readerPathForBookTitle(bookTitle) : null),
-    [bookTitle],
-  );
 
   useEffect(() => {
-    if (!canonicalReaderPath || location.pathname === canonicalReaderPath) {
+    if (!bookTitle || routeBookTitle === bookTitle) {
       return;
     }
 
-    navigate(canonicalReaderPath, { replace: true, state: location.state });
-  }, [canonicalReaderPath, location.pathname, location.state, navigate]);
+    navigate({
+      to: "/reader/$bookTitle",
+      params: { bookTitle },
+      replace: true,
+      state: (prev) => prev,
+    });
+  }, [bookTitle, routeBookTitle, navigate]);
 
-  return { bookTitle, canonicalReaderPath };
+  return { bookTitle };
 }

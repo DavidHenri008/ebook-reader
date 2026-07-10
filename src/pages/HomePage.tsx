@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import styled from "@emotion/styled";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "@tanstack/react-router";
 import { BookCard, FilePicker, Button, IconButton } from "../components";
 import { useDialogs } from "../components/ui";
 import {
@@ -15,7 +15,6 @@ import {
 } from "../storage";
 import { extractRawBook } from "../services/bookExtractor";
 import { useAppTheme } from "../styles";
-import { readerPathForBookTitle } from "../utils/bookTitleUrl";
 import type { BookMeta } from "../types";
 
 //#region Styled Components
@@ -165,7 +164,9 @@ function HomePage() {
       if (extractingIds.has(book.id)) return;
       const file = await getBookFile(book.id);
       if (file) {
-        navigate(readerPathForBookTitle(book.title), {
+        navigate({
+          to: "/reader/$bookTitle",
+          params: { bookTitle: book.title },
           state: { file, bookId: book.id, bookTitle: book.title, theme },
         });
       }

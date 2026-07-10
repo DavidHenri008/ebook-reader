@@ -1,18 +1,8 @@
-import { BrowserRouter, Routes, Route } from "react-router-dom";
-import { HomePage, ReaderPage } from "./pages";
-import ErrorBoundary from "./components/ErrorBoundary";
+import { RouterProvider } from "@tanstack/react-router";
+import { router } from "./router";
 
 function App() {
-  return (
-    <BrowserRouter>
-      <ErrorBoundary>
-        <Routes>
-          <Route path="/" element={<HomePage />} />
-          <Route path="/reader/:bookTitle" element={<ReaderPage />} />
-        </Routes>
-      </ErrorBoundary>
-    </BrowserRouter>
-  );
+  return <RouterProvider router={router} />;
 }
 
 export default App;

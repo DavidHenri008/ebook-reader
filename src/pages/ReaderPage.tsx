@@ -1,5 +1,5 @@
 import { useEffect, useCallback, useMemo, useState } from "react";
-import { useLocation, useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "@tanstack/react-router";
 import styled from "@emotion/styled";
 import { SectionViewer, ReaderToolbar, ReaderSidebar } from "../components";
 import {
@@ -154,8 +154,8 @@ function ReaderBody({
 function ReaderPage() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { bookTitle: routeBookTitle } = useParams<{ bookTitle?: string }>();
-  const locationState = location.state as LocationState | null;
+  const { bookTitle: routeBookTitle } = useParams({ strict: false });
+  const locationState = location.state as LocationState | undefined;
 
   const file = locationState?.file ?? null;
   const bookId = locationState?.bookId ?? null;
@@ -307,7 +307,7 @@ function ReaderPage() {
   );
 
   const handleBackToLibrary = useCallback(() => {
-    navigate("/");
+    navigate({ to: "/" });
   }, [navigate]);
 
   const controlsDisabled = !file || !readingState || !extractedBook;

@@ -58,3 +58,16 @@ Then open the printed local URL and import an EPUB to start reading.
 - `src/storage/` — IndexedDB wrappers for the library, raw book cache, and reading state.
 - `src/types/` — shared data contracts.
 - `src/utils/` — small shared helpers.
+
+## Installation
+How to use it on your PC without manually starting a server each time:
+
+- Run once:
+    `npm install`
+    `npm run build`
+    `npm run preview`
+- Open the shown localhost URL in Chrome or Edge.
+- Install the app (browser menu: Install app / Apps > Install this site as an app).
+- Launch the installed app from Start menu afterward.
+- After install, it can run offline from cache for normal use.
+- If you want a true standalone app that never depends on browser/PWA behavior, the next step is packaging as a desktop app (Electron or Tauri).
