@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   getFirstBrowserBlobUrl,
   containsBrowserBlobUrl,
-} from "./htmlReferences";
+} from "../htmlReferences";
 
 describe("getFirstBrowserBlobUrl", () => {
   it("returns the first browser blob URL found", () => {

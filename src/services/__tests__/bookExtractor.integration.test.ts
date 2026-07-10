@@ -3,10 +3,10 @@ import { readFileSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 import JSZip from "jszip";
-import { collectAssetReferences } from "./bookExtractor";
+import { collectAssetReferences } from "../bookExtractor";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const EPUB_PATH = resolve(here, "../../SMALL.epub");
+const EPUB_PATH = resolve(here, "./SMALL.epub");
 
 const ASSET_ATTRIBUTE_NAMES = new Set([
   "src",

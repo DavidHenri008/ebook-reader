@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { collectAssetReferences } from "./bookExtractor";
+import { collectAssetReferences } from "../bookExtractor";
 
 /**
  * These tests pin the exact set of local asset references the extractor

@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   bookTitleFromUrlSegment,
   readerPathForBookTitle,
-} from "./bookTitleUrl";
+} from "../bookTitleUrl";
 
 describe("readerPathForBookTitle", () => {
   it("encodes the title into the reader path", () => {

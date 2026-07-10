@@ -3,7 +3,7 @@ import {
   normalizeAnchor,
   normalizeSectionIndex,
   clampSectionIndex,
-} from "./readingLocation";
+} from "../readingLocation";
 
 describe("normalizeAnchor", () => {
   it("clamps to >= 0 and passes through finite values", () => {
