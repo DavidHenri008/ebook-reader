@@ -645,25 +645,72 @@ add, remove-as-forget, refresh).
 
 ## Phase 7 — (Optional) Thin backend / BFF
 
-**Goal:** Only if you need **refresh tokens** (avoid re-consent during long reading
-sessions), server-held secrets, non-Google logins, or shared/team features. **The
-default plan needs no backend.**
+**Default decision:** Skip this phase unless the browser-only GIS token model from
+Phases 2-6 becomes insufficient. The planned app works without a backend: Google
+Drive remains the source of truth, the SPA talks to Google APIs directly, and there
+is still no application database or server-side EPUB storage.
 
-**Steps**
+**What "BFF" means here:** a **Backend For Frontend** is a tiny service owned by
+this app, deployed next to the static site. Its job is auth/session plumbing only:
+it can hold a Google OAuth client secret, perform the OAuth code exchange, keep or
+refresh Google tokens in a server-controlled session, and return only the small API
+responses the SPA needs. It is **not** a content backend.
 
-1. A small **stateless** service (Cloudflare Workers fit the $0 host) that performs
-   the OAuth **code exchange** (holding the client secret), issues an **httpOnly**
-   session cookie, refreshes Drive tokens, and optionally proxies Drive calls.
-2. Keep it **stateless** (stores **no** book content) to stay cheap and private.
-3. Deploy on **Cloudflare Workers** (same $0 host family as Pages).
+**Choose this phase only when you need one of these capabilities:**
 
-**Files touched:** new `server/` or `functions/`, deployment config, small changes
-to `src/auth/*` to talk to the BFF.
+- **Refresh tokens / fewer re-consent prompts:** browser-only access tokens are
+  short-lived and cannot safely keep a refresh token. A BFF can use the server-side
+  OAuth code flow and refresh Drive access without asking the user again during long
+  sessions.
+- **Server-held secrets:** any real secret, such as an OAuth client secret, must live
+  on the server. The current Client ID, Picker API key, and Picker App ID are public
+  and do **not** require a backend.
+- **Server-verified identity:** the SPA can perform lightweight ID-token checks, but
+  a BFF can verify tokens server-side before creating an app session.
+- **Future features that need a server:** non-Google identity providers,
+  organization/team policy, or sharing/collaboration workflows. These are out of
+  scope for the default app.
+
+**What changes if this phase is adopted:**
+
+1. Add a small Cloudflare Worker (or equivalent) that handles Google OAuth using a
+   server-side code flow, stores secrets only in Worker environment variables, and
+   issues an **httpOnly**, `Secure`, `SameSite=Lax` session cookie to the SPA.
+2. The Worker refreshes Google Drive access tokens when needed. Token/session state
+   can live in encrypted cookies or another minimal session store, but it must not
+   store EPUB files, extracted book content, covers, manifests, or settings as app
+   data.
+3. Decide whether Drive REST calls still happen directly from the SPA using short
+   access tokens returned by the BFF, or whether the BFF proxies a narrow set of
+   Drive calls. If proxying, keep the API deliberately small: manifest/settings
+   read-write, file metadata, EPUB upload/download, and Picker bootstrap support.
+4. Keep the same data model: `library.json`, `settings.json`, and EPUB files stay in
+   the user's Google Drive; the derived extraction cache stays local in IndexedDB;
+   remove-from-library still only forgets the manifest entry and local cache.
+5. Deploy the Worker alongside Cloudflare Pages and update `src/auth/*` and the Drive
+   client seam to call the BFF where needed.
+
+**Hard boundaries**
+
+- Do **not** add an application database for books.
+- Do **not** upload EPUBs or extracted sections to the BFF.
+- Do **not** broaden Drive scopes beyond `drive.file` just because a server exists.
+- Do **not** make Phase 7 a prerequisite for deployment; Phase 8 should work from
+  the no-backend SPA path.
+
+**Files touched:** new `server/` or `functions/`, deployment config, Worker
+environment-variable docs, and focused changes to `src/auth/*` plus the Drive client
+boundary if the SPA stops calling Google APIs directly.
 
 **Acceptance criteria**
 
-- The SPA works against the BFF; secrets live **only** on the server.
-- Hosting stays cheap; the default no-backend path is unaffected.
+- The existing no-backend SPA path still works and remains documented as the default.
+- Secrets live **only** on the server; none are bundled into the SPA.
+- The SPA can sign in through the BFF, keep an httpOnly-session-backed login, and
+  refresh Drive access without user re-consent during long sessions.
+- Google Drive remains the source of truth for user content; the BFF stores no EPUB
+  files, extracted content, manifest data, or settings as application-owned data.
+- Hosting remains cheap and simple, preferably Cloudflare Pages + Cloudflare Workers.
 
 ---
 
