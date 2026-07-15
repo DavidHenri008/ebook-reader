@@ -7,7 +7,7 @@ interface ReaderBookTitleResult {
 
 /**
  * Resolves the reader's display title from navigation state first, then the
- * Drive manifest. The route's `bookId` is the durable reader identity.
+ * Google Drive manifest. The route's `bookId` is the durable reader identity.
  *
  * @param bookId - Current book id, or `null` when none is loaded.
  * @param locationBookTitle - Title supplied via navigation state, if any.

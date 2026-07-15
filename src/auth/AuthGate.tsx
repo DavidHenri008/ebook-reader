@@ -45,6 +45,11 @@ const GoogleButtonHost = styled.div`
   margin-bottom: 0.75rem;
 `;
 
+const ButtonRow = styled.div`
+  display: flex;
+  justify-content: center;
+`;
+
 interface AuthGateProps {
   children: React.ReactNode;
 }
@@ -64,19 +69,20 @@ function AuthGate({ children }: AuthGateProps) {
     <Shell>
       <Panel>
         <Title>EPUB Reader</Title>
-        <Text>
-          Sign in with Google to load your Drive-backed library. Your books stay
-          in your Google Drive.
-        </Text>
+        <Text>Sign in with Google to access your Google Drive library.</Text>
         <GoogleButtonHost ref={googleButtonRef} />
-        <Button
-          type="button"
-          $variant="filled"
-          disabled={status === "checking" || status === "error"}
-          onClick={() => void signIn()}
-        >
-          {status === "checking" ? "Checking session..." : "Use Google prompt"}
-        </Button>
+        <ButtonRow>
+          <Button
+            type="button"
+            $variant="filled"
+            disabled={status === "checking" || status === "error"}
+            onClick={() => void signIn()}
+          >
+            {status === "checking"
+              ? "Checking session..."
+              : "Use Google prompt"}
+          </Button>
+        </ButtonRow>
         {error && <ErrorText>{error}</ErrorText>}
       </Panel>
     </Shell>

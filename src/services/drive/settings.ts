@@ -54,7 +54,7 @@ export async function updateDriveSettings(
   debounceMs = 0,
 ): Promise<DriveSettingsDocument> {
   if (!cachedSettings || !settingsFileId) {
-    throw new Error("Drive settings are not loaded.");
+    throw new Error("Google Drive settings are not loaded.");
   }
   cachedSettings = normalizeSettings({
     ...mutate(cloneSettings(cachedSettings)),

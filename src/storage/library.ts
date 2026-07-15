@@ -138,7 +138,7 @@ export async function addPickedDriveBook(
   onProgress?: BookProgress,
 ): Promise<BookMeta> {
   const manifest = await ensureDriveLibrary({ promptIfMissing: true });
-  onProgress?.(`Reading Drive metadata for ${item.name}...`);
+  onProgress?.(`Reading Google Drive metadata for ${item.name}...`);
   const driveMetadata = await getDriveFileMetadata(item.id);
   onProgress?.(
     `Downloading ${item.name}...`,
@@ -177,7 +177,7 @@ export async function validateBookCache(
 ): Promise<CacheValidationResult> {
   const book = await requireBook(bookId);
   if (!book.driveFileId)
-    throw new Error(`Book ${bookId} has no Drive file id.`);
+    throw new Error(`Book ${bookId} has no Google Drive file id.`);
 
   try {
     const metadata = await getDriveFileMetadata(book.driveFileId);
@@ -202,7 +202,7 @@ export async function fetchBookFileForExtraction(
 ): Promise<BookFileForExtraction> {
   const book = await requireBook(bookId);
   if (!book.driveFileId)
-    throw new Error(`Book ${bookId} has no Drive file id.`);
+    throw new Error(`Book ${bookId} has no Google Drive file id.`);
 
   const metadata = await getDriveFileMetadata(book.driveFileId);
   const currentFingerprint = fingerprintFromMetadata(metadata);
@@ -373,7 +373,7 @@ export function getStorageErrorMessage(error: unknown): string {
       return "Google Drive is rate-limiting requests. The app will retry; try again in a moment.";
     }
     if (error.status === 404) {
-      return "A Drive file in your library could not be found and was removed from the manifest.";
+      return "A Google Drive file in your library could not be found and was removed from the manifest.";
     }
     return error.message;
   }
@@ -393,7 +393,7 @@ async function upsertBook(book: BookMeta): Promise<void> {
 async function requireBook(bookId: string): Promise<BookMeta> {
   const manifest = await ensureDriveLibrary({ promptIfMissing: false });
   const book = manifest.books.find((candidate) => candidate.id === bookId);
-  if (!book) throw new Error("This book is not in your Drive library.");
+  if (!book) throw new Error("This book is not in your Google Drive library.");
   return book;
 }
 

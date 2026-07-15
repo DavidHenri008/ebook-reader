@@ -274,8 +274,8 @@ function BookCard({
           type="button"
           className="action-btn"
           onClick={handleRemove}
-          aria-label={`Remove ${book.title} from library and keep the Drive file`}
-          title="Remove from library; keeps the file in Drive"
+          aria-label={`Remove ${book.title} from library and keep the Google Drive file`}
+          title="Remove from library; keeps the file in Google Drive"
         >
           X
         </RemoveButton>

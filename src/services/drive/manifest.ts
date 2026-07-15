@@ -67,7 +67,7 @@ export async function writeDriveManifest(
 export async function updateDriveManifest(
   mutate: (manifest: DriveLibraryManifest) => DriveLibraryManifest,
 ): Promise<DriveLibraryManifest> {
-  if (!cachedManifest) throw new Error("Drive library is not loaded.");
+  if (!cachedManifest) throw new Error("Google Drive library is not loaded.");
   return writeDriveManifest(mutate(cloneManifest(cachedManifest)));
 }
 

@@ -43,7 +43,7 @@ export function useBookExtraction(
       if (!bookId) return;
 
       try {
-        setProgressMessage("Validating Drive file...");
+        setProgressMessage("Validating Google Drive file...");
         const validation = await validateBookCache(bookId);
 
         if (validation.fingerprintMatches) {

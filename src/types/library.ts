@@ -22,7 +22,7 @@ export interface BookMeta {
   lastOpenedAt?: number;
   /** Google Drive file id for the EPUB bytes */
   driveFileId?: string;
-  /** Current Drive metadata fingerprint for cache validation */
+  /** Current Google Drive metadata fingerprint for cache validation */
   driveFingerprint?: DriveFileFingerprint;
   /** App-only library folder assignment */
   virtualFolderId?: string;

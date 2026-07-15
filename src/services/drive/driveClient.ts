@@ -180,11 +180,15 @@ export async function updateDriveJsonFile<T>(
     `--${boundary}--`,
   ].join("\r\n");
 
-  return driveJson<DriveJsonFileMetadata>(`/files/${fileId}?${params}`, {
+  const response = await authorizedFetch(
+    `${DRIVE_UPLOAD_API}/files/${fileId}?${params}`,
+    {
     method: "PATCH",
     headers: { "Content-Type": `multipart/related; boundary=${boundary}` },
     body: multipartBody,
-  });
+    },
+  );
+  return response.json() as Promise<DriveJsonFileMetadata>;
 }
 
 export async function listDriveFilesByAppProperty(

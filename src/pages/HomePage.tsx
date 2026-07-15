@@ -268,7 +268,7 @@ function HomePage() {
   const handleChangeFolder = useCallback(async () => {
     if (
       !(await confirm(
-        "Choose a different Drive library folder? This switches the manifest the app reads; it does not move or delete Drive files.",
+        "Do you want to choose a different Google Drive library folder?",
       ))
     ) {
       return;
@@ -371,7 +371,7 @@ function HomePage() {
   const handleClearCachedBooks = useCallback(async () => {
     if (
       !(await confirm(
-        "Clear all cached extracted books? Books stay in your Drive library, but they will download and re-extract on next open.",
+        "Clear all cached extracted books? Books stay in your Google Drive library, but they will download and re-extract on next open.",
       ))
     ) {
       return;
@@ -415,7 +415,7 @@ function HomePage() {
     async (folder: VirtualFolder) => {
       if (
         !(await confirm(
-          `Delete the app folder "${folder.name}"? Books stay in your library and Drive files are not moved or deleted.`,
+          `Delete the app folder "${folder.name}"? Books stay in your library and Google Drive files are not moved or deleted.`,
           { confirmLabel: "Delete folder" },
         ))
       ) {
@@ -465,7 +465,7 @@ function HomePage() {
   if (isLoading) {
     return (
       <Container>
-        <LoadingText>Loading Drive library...</LoadingText>
+        <LoadingText>Loading Google Drive library...</LoadingText>
       </Container>
     );
   }
@@ -474,7 +474,7 @@ function HomePage() {
     return (
       <Container>
         <EmptyState>
-          <EmptyTitle>Choose a Drive library folder</EmptyTitle>
+          <EmptyTitle>Choose a Google Drive library folder</EmptyTitle>
           <EmptyText>
             The app will create an app-data folder for library.json and
             settings.json. Your EPUB files stay in Google Drive.
@@ -485,7 +485,7 @@ function HomePage() {
             onClick={handleChooseFolder}
             disabled={isRefreshing}
           >
-            {isRefreshing ? "Opening Picker..." : "Choose Drive folder"}
+            {isRefreshing ? "Opening Picker..." : "Choose Google Drive folder"}
           </Button>
           {errorMessage && <ErrorText>{errorMessage}</ErrorText>}
         </EmptyState>
@@ -501,8 +501,8 @@ function HomePage() {
           <Title>My Library</Title>
           <SubtleText>
             {libraryInfo?.folderName
-              ? `Drive folder: ${libraryInfo.folderName}`
-              : "Drive-backed library"}
+              ? `Google Drive folder: ${libraryInfo.folderName}`
+              : "Google Drive backed library"}
           </SubtleText>
         </div>
         <HeaderActions>
@@ -531,7 +531,7 @@ function HomePage() {
             onClick={handleChangeFolder}
             disabled={isRefreshing}
           >
-            Change Drive folder
+            Change Google Drive folder
           </Button>
           <Button
             type="button"
@@ -555,7 +555,7 @@ function HomePage() {
             onClick={handleAddFromDrive}
             disabled={isAdding}
           >
-            Add from Drive
+            Add from Google Drive
           </Button>
           <FilePicker
             onFileSelect={handleFileSelect}
@@ -643,8 +643,8 @@ function HomePage() {
         <EmptyState>
           <EmptyTitle>Your library is empty</EmptyTitle>
           <EmptyText>
-            Upload an EPUB or add one from Drive. App folders organize this
-            library only; they do not create or move Drive folders.
+            Upload an EPUB or add one from Google Drive. App folders organize
+            this library only; they do not create or move Google Drive folders.
           </EmptyText>
         </EmptyState>
       ) : visibleBooks.length === 0 ? (
