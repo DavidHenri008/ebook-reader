@@ -75,7 +75,11 @@ export async function chooseDriveLibraryFolder(): Promise<DriveLibraryManifest> 
   });
   setCachedDriveSettings(settingsFile.id, settings);
 
-  const manifest = createEmptyManifest(folder.id, folder.name, appDataFolder.id);
+  const manifest = createEmptyManifest(
+    folder.id,
+    folder.name,
+    appDataFolder.id,
+  );
   manifest.settingsFileId = settingsFile.id;
   const manifestFile = await createDriveJsonFile({
     name: "library.json",
@@ -117,7 +121,10 @@ async function recoverDriveLibrary(
     "library-manifest",
   );
   for (const file of manifests) {
-    if (file.appProperties?.accountSub && file.appProperties.accountSub !== accountSub) {
+    if (
+      file.appProperties?.accountSub &&
+      file.appProperties.accountSub !== accountSub
+    ) {
       continue;
     }
     try {
@@ -137,7 +144,8 @@ async function loadFromState(
   state: LocalDriveLibraryState,
 ): Promise<DriveLibraryManifest> {
   const manifest = await loadDriveManifest(state.manifestFileId);
-  manifest.libraryFolderName = manifest.libraryFolderName ?? state.libraryFolderName;
+  manifest.libraryFolderName =
+    manifest.libraryFolderName ?? state.libraryFolderName;
   manifest.manifestFileId = state.manifestFileId;
   manifest.settingsFileId = manifest.settingsFileId ?? state.settingsFileId;
   await loadDriveSettings(manifest.settingsFileId);

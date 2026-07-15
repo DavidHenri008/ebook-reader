@@ -57,7 +57,9 @@ interface GoogleIdentityApi {
     id: {
       initialize: (config: IdConfiguration) => void;
       renderButton: (parent: HTMLElement, options: ButtonConfiguration) => void;
-      prompt: (callback?: (notification: PromptMomentNotification) => void) => void;
+      prompt: (
+        callback?: (notification: PromptMomentNotification) => void,
+      ) => void;
       disableAutoSelect: () => void;
     };
     oauth2: {
@@ -118,9 +120,13 @@ export async function loadGoogleIdentity(): Promise<void> {
       );
       if (existing) {
         existing.addEventListener("load", () => resolve(), { once: true });
-        existing.addEventListener("error", () => reject(new Error("Failed to load Google Identity Services.")), {
-          once: true,
-        });
+        existing.addEventListener(
+          "error",
+          () => reject(new Error("Failed to load Google Identity Services.")),
+          {
+            once: true,
+          },
+        );
         return;
       }
 
@@ -291,7 +297,10 @@ export async function requestDriveAccessToken(
 
 function base64UrlDecode(value: string): string {
   const base64 = value.replace(/-/g, "+").replace(/_/g, "/");
-  const padded = base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), "=");
+  const padded = base64.padEnd(
+    base64.length + ((4 - (base64.length % 4)) % 4),
+    "=",
+  );
   const binary = atob(padded);
   const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
   return new TextDecoder().decode(bytes);

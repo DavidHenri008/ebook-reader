@@ -293,10 +293,7 @@ function ReaderPage() {
     [saveZoom],
   );
 
-  const zoomIn = useCallback(
-    () => applyZoomDelta(ZOOM_STEP),
-    [applyZoomDelta],
-  );
+  const zoomIn = useCallback(() => applyZoomDelta(ZOOM_STEP), [applyZoomDelta]);
   const zoomOut = useCallback(
     () => applyZoomDelta(-ZOOM_STEP),
     [applyZoomDelta],

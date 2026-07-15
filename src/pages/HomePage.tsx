@@ -347,7 +347,9 @@ function HomePage() {
         )
       ) {
         await removeBookFromLibrary(book.id);
-        setBooks((prev) => prev.filter((candidate) => candidate.id !== book.id));
+        setBooks((prev) =>
+          prev.filter((candidate) => candidate.id !== book.id),
+        );
       }
     },
     [confirm],
@@ -474,8 +476,8 @@ function HomePage() {
         <EmptyState>
           <EmptyTitle>Choose a Drive library folder</EmptyTitle>
           <EmptyText>
-            The app will create an app-data folder for library.json and settings.json.
-            Your EPUB files stay in Google Drive.
+            The app will create an app-data folder for library.json and
+            settings.json. Your EPUB files stay in Google Drive.
           </EmptyText>
           <Button
             type="button"
@@ -524,7 +526,11 @@ function HomePage() {
           <Button type="button" onClick={handleRefresh} disabled={isRefreshing}>
             {isRefreshing ? "Refreshing..." : "Refresh"}
           </Button>
-          <Button type="button" onClick={handleChangeFolder} disabled={isRefreshing}>
+          <Button
+            type="button"
+            onClick={handleChangeFolder}
+            disabled={isRefreshing}
+          >
             Change Drive folder
           </Button>
           <Button
@@ -536,7 +542,9 @@ function HomePage() {
           </Button>
           <IconButton
             aria-label="Toggle theme"
-            title={theme === "light" ? "Switch to dark mode" : "Switch to light mode"}
+            title={
+              theme === "light" ? "Switch to dark mode" : "Switch to light mode"
+            }
             onClick={toggleTheme}
           >
             {theme === "light" ? "☾" : "☀"}
@@ -549,7 +557,11 @@ function HomePage() {
           >
             Add from Drive
           </Button>
-          <FilePicker onFileSelect={handleFileSelect} label="Upload" disabled={isAdding} />
+          <FilePicker
+            onFileSelect={handleFileSelect}
+            label="Upload"
+            disabled={isAdding}
+          />
         </HeaderActions>
       </Toolbar>
 
@@ -592,10 +604,16 @@ function HomePage() {
               >
                 ↓
               </Button>
-              <Button type="button" onClick={() => void handleRenameFolder(folder)}>
+              <Button
+                type="button"
+                onClick={() => void handleRenameFolder(folder)}
+              >
                 Rename
               </Button>
-              <Button type="button" onClick={() => void handleDeleteFolder(folder)}>
+              <Button
+                type="button"
+                onClick={() => void handleDeleteFolder(folder)}
+              >
                 Delete
               </Button>
             </FolderTools>
@@ -625,14 +643,16 @@ function HomePage() {
         <EmptyState>
           <EmptyTitle>Your library is empty</EmptyTitle>
           <EmptyText>
-            Upload an EPUB or add one from Drive. App folders organize this library only;
-            they do not create or move Drive folders.
+            Upload an EPUB or add one from Drive. App folders organize this
+            library only; they do not create or move Drive folders.
           </EmptyText>
         </EmptyState>
       ) : visibleBooks.length === 0 ? (
         <EmptyState>
           <EmptyTitle>No books here</EmptyTitle>
-          <EmptyText>Move books into this app folder from the book controls.</EmptyText>
+          <EmptyText>
+            Move books into this app folder from the book controls.
+          </EmptyText>
         </EmptyState>
       ) : (
         <LibraryGrid>

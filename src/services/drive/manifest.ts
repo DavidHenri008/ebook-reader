@@ -55,7 +55,10 @@ export async function writeDriveManifest(
   if (!manifestFileId) {
     throw new Error("Manifest file id is missing.");
   }
-  const next = normalizeManifest({ ...manifest, updatedAt: Date.now() }, manifestFileId);
+  const next = normalizeManifest(
+    { ...manifest, updatedAt: Date.now() },
+    manifestFileId,
+  );
   cachedManifest = next;
   await updateDriveJsonFile(manifestFileId, next, MANIFEST_APP_PROPERTIES);
   return next;
@@ -86,13 +89,20 @@ function normalizeManifest(
 }
 
 function sortFolders(folders: VirtualFolder[]): VirtualFolder[] {
-  return [...folders].sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
+  return [...folders].sort(
+    (a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name),
+  );
 }
 
 function cloneManifest(manifest: DriveLibraryManifest): DriveLibraryManifest {
   return {
     ...manifest,
     virtualFolders: manifest.virtualFolders.map((folder) => ({ ...folder })),
-    books: manifest.books.map((book) => ({ ...book, driveFingerprint: book.driveFingerprint ? { ...book.driveFingerprint } : undefined })),
+    books: manifest.books.map((book) => ({
+      ...book,
+      driveFingerprint: book.driveFingerprint
+        ? { ...book.driveFingerprint }
+        : undefined,
+    })),
   };
 }

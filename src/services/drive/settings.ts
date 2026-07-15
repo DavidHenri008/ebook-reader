@@ -10,7 +10,9 @@ let cachedSettings: DriveSettingsDocument | null = null;
 let settingsFileId: string | null = null;
 let pendingTimer: number | null = null;
 
-export function createDefaultSettings(theme: Theme = "dark"): DriveSettingsDocument {
+export function createDefaultSettings(
+  theme: Theme = "dark",
+): DriveSettingsDocument {
   return {
     schemaVersion: 1,
     theme,
@@ -72,7 +74,11 @@ export async function flushSettingsWrite(): Promise<void> {
     pendingTimer = null;
   }
   if (!cachedSettings || !settingsFileId) return;
-  await updateDriveJsonFile(settingsFileId, cachedSettings, SETTINGS_APP_PROPERTIES);
+  await updateDriveJsonFile(
+    settingsFileId,
+    cachedSettings,
+    SETTINGS_APP_PROPERTIES,
+  );
 }
 
 function scheduleSettingsWrite(debounceMs: number): void {
@@ -83,7 +89,9 @@ function scheduleSettingsWrite(debounceMs: number): void {
   }, debounceMs);
 }
 
-function normalizeSettings(settings: DriveSettingsDocument): DriveSettingsDocument {
+function normalizeSettings(
+  settings: DriveSettingsDocument,
+): DriveSettingsDocument {
   return {
     schemaVersion: 1,
     theme: settings.theme === "light" ? "light" : "dark",
@@ -96,7 +104,10 @@ function cloneSettings(settings: DriveSettingsDocument): DriveSettingsDocument {
   return {
     ...settings,
     perBook: Object.fromEntries(
-      Object.entries(settings.perBook).map(([bookId, state]) => [bookId, { ...state }]),
+      Object.entries(settings.perBook).map(([bookId, state]) => [
+        bookId,
+        { ...state },
+      ]),
     ),
   };
 }

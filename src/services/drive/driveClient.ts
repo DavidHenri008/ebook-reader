@@ -93,8 +93,13 @@ export async function downloadDriveFile(
   fileId: string,
   onProgress?: (loaded: number, total: number) => void,
 ): Promise<ArrayBuffer> {
-  const params = new URLSearchParams({ alt: "media", supportsAllDrives: "true" });
-  const response = await authorizedFetch(`${DRIVE_API}/files/${fileId}?${params}`);
+  const params = new URLSearchParams({
+    alt: "media",
+    supportsAllDrives: "true",
+  });
+  const response = await authorizedFetch(
+    `${DRIVE_API}/files/${fileId}?${params}`,
+  );
   const total = Number(response.headers.get("content-length") ?? 0);
 
   if (!response.body || !onProgress) return response.arrayBuffer();
@@ -215,17 +220,21 @@ export async function uploadDriveEpubResumable(
     fields: "id,name,mimeType,modifiedTime,size,md5Checksum,version",
     supportsAllDrives: "true",
   });
-  const startResponse = await authorizedFetch(`${DRIVE_UPLOAD_API}/files?${params}`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json; charset=UTF-8",
-      "X-Upload-Content-Type": options.file.type || "application/epub+zip",
-      "X-Upload-Content-Length": String(options.file.size),
+  const startResponse = await authorizedFetch(
+    `${DRIVE_UPLOAD_API}/files?${params}`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json; charset=UTF-8",
+        "X-Upload-Content-Type": options.file.type || "application/epub+zip",
+        "X-Upload-Content-Length": String(options.file.size),
+      },
+      body: JSON.stringify(metadata),
     },
-    body: JSON.stringify(metadata),
-  });
+  );
   const uploadUrl = startResponse.headers.get("location");
-  if (!uploadUrl) throw new Error("Google Drive did not return an upload session.");
+  if (!uploadUrl)
+    throw new Error("Google Drive did not return an upload session.");
   return uploadWithProgress(uploadUrl, options.file, options.onProgress);
 }
 
@@ -234,7 +243,8 @@ async function createDriveFileMetadata(
 ): Promise<DriveJsonFileMetadata> {
   const params = new URLSearchParams({
     fields:
-      options.fields ?? "id,name,mimeType,modifiedTime,size,version,appProperties",
+      options.fields ??
+      "id,name,mimeType,modifiedTime,size,version,appProperties",
     supportsAllDrives: "true",
   });
   return driveJson<DriveJsonFileMetadata>(`/files?${params}`, {
@@ -249,10 +259,7 @@ async function createDriveFileMetadata(
   });
 }
 
-async function driveJson<T>(
-  path: string,
-  init: RequestInit = {},
-): Promise<T> {
+async function driveJson<T>(path: string, init: RequestInit = {}): Promise<T> {
   const response = await authorizedFetch(`${DRIVE_API}${path}`, init);
   return response.json() as Promise<T>;
 }
@@ -293,7 +300,10 @@ function uploadWithProgress(
   return new Promise((resolve, reject) => {
     const request = new XMLHttpRequest();
     request.open("PUT", uploadUrl);
-    request.setRequestHeader("Content-Type", file.type || "application/epub+zip");
+    request.setRequestHeader(
+      "Content-Type",
+      file.type || "application/epub+zip",
+    );
     request.upload.onprogress = (event) => {
       if (event.lengthComputable) onProgress?.(event.loaded, event.total);
     };

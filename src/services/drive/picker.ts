@@ -107,7 +107,8 @@ async function openPicker(
       });
 
     for (const view of views) builder = builder.addView(view);
-    if (multiselect) builder = builder.enableFeature(picker.Feature.MULTISELECT_ENABLED);
+    if (multiselect)
+      builder = builder.enableFeature(picker.Feature.MULTISELECT_ENABLED);
     builder.build().setVisible(true);
   });
 }
@@ -124,8 +125,9 @@ async function loadPickerApi(): Promise<PickerApi> {
     });
   }
   await pickerLoadPromise;
-  const picker = (window.google as unknown as { picker?: PickerApi } | undefined)
-    ?.picker;
+  const picker = (
+    window.google as unknown as { picker?: PickerApi } | undefined
+  )?.picker;
   if (!picker) throw new Error("Google Picker is unavailable.");
   return picker;
 }
@@ -139,9 +141,13 @@ function loadGapiScript(): Promise<void> {
       );
       if (existing) {
         existing.addEventListener("load", () => resolve(), { once: true });
-        existing.addEventListener("error", () => reject(new Error("Failed to load Google API script.")), {
-          once: true,
-        });
+        existing.addEventListener(
+          "error",
+          () => reject(new Error("Failed to load Google API script.")),
+          {
+            once: true,
+          },
+        );
         return;
       }
 
@@ -150,7 +156,8 @@ function loadGapiScript(): Promise<void> {
       script.async = true;
       script.defer = true;
       script.onload = () => resolve();
-      script.onerror = () => reject(new Error("Failed to load Google API script."));
+      script.onerror = () =>
+        reject(new Error("Failed to load Google API script."));
       document.head.append(script);
     });
   }
@@ -167,5 +174,9 @@ function toPickedDriveItem(
   if (typeof id !== "string" || typeof name !== "string") {
     throw new Error("Google Picker returned an invalid document.");
   }
-  return { id, name, mimeType: typeof mimeType === "string" ? mimeType : undefined };
+  return {
+    id,
+    name,
+    mimeType: typeof mimeType === "string" ? mimeType : undefined,
+  };
 }

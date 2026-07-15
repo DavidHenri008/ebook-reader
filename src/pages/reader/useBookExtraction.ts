@@ -101,7 +101,7 @@ export function useBookExtraction(
 
         if (cancelled) return;
 
-  setResolvedBookId(fetched.bookId);
+        setResolvedBookId(fetched.bookId);
         setExtractedBook(result);
         setToc(result.toc);
         setProgressMessage(null);

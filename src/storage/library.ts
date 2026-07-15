@@ -92,7 +92,8 @@ export async function addBookToLibrary(
     file,
     parentId: manifest.libraryFolderId,
     appProperties: bookAppProperties(id),
-    onProgress: (loaded, total) => onProgress?.(`Uploading ${file.name}...`, loaded, total),
+    onProgress: (loaded, total) =>
+      onProgress?.(`Uploading ${file.name}...`, loaded, total),
   });
 
   const now = Date.now();
@@ -139,7 +140,11 @@ export async function addPickedDriveBook(
   const manifest = await ensureDriveLibrary({ promptIfMissing: true });
   onProgress?.(`Reading Drive metadata for ${item.name}...`);
   const driveMetadata = await getDriveFileMetadata(item.id);
-  onProgress?.(`Downloading ${item.name}...`, 0, Number(driveMetadata.size ?? 0));
+  onProgress?.(
+    `Downloading ${item.name}...`,
+    0,
+    Number(driveMetadata.size ?? 0),
+  );
   const fileData = await downloadDriveFile(item.id, (loaded, total) => {
     onProgress?.(`Downloading ${item.name}...`, loaded, total);
   });
@@ -171,7 +176,8 @@ export async function validateBookCache(
   bookId: string,
 ): Promise<CacheValidationResult> {
   const book = await requireBook(bookId);
-  if (!book.driveFileId) throw new Error(`Book ${bookId} has no Drive file id.`);
+  if (!book.driveFileId)
+    throw new Error(`Book ${bookId} has no Drive file id.`);
 
   try {
     const metadata = await getDriveFileMetadata(book.driveFileId);
@@ -195,18 +201,25 @@ export async function fetchBookFileForExtraction(
   onProgress?: BookProgress,
 ): Promise<BookFileForExtraction> {
   const book = await requireBook(bookId);
-  if (!book.driveFileId) throw new Error(`Book ${bookId} has no Drive file id.`);
+  if (!book.driveFileId)
+    throw new Error(`Book ${bookId} has no Drive file id.`);
 
   const metadata = await getDriveFileMetadata(book.driveFileId);
   const currentFingerprint = fingerprintFromMetadata(metadata);
   onProgress?.(`Downloading ${book.title}...`, 0, Number(metadata.size ?? 0));
-  const fileData = await downloadDriveFile(book.driveFileId, (loaded, total) => {
-    onProgress?.(`Downloading ${book.title}...`, loaded, total);
-  });
+  const fileData = await downloadDriveFile(
+    book.driveFileId,
+    (loaded, total) => {
+      onProgress?.(`Downloading ${book.title}...`, loaded, total);
+    },
+  );
   const actualBookId = await sha256Hex(fileData);
 
   if (actualBookId !== book.id) {
-    const metadataFromBook = await extractEpubMetadata(fileData, metadata.name || book.filename);
+    const metadataFromBook = await extractEpubMetadata(
+      fileData,
+      metadata.name || book.filename,
+    );
     const nextBook: BookMeta = {
       ...book,
       id: actualBookId,
@@ -222,7 +235,8 @@ export async function fetchBookFileForExtraction(
       ...manifest,
       books: [
         ...manifest.books.filter(
-          (candidate) => candidate.id !== book.id && candidate.id !== actualBookId,
+          (candidate) =>
+            candidate.id !== book.id && candidate.id !== actualBookId,
         ),
         nextBook,
       ],
@@ -262,7 +276,9 @@ export async function removeBookFromLibrary(id: string): Promise<void> {
   await Promise.all([deleteRawBook(id), deleteReadingState(id)]);
 }
 
-export async function createLibraryFolder(name: string): Promise<VirtualFolder> {
+export async function createLibraryFolder(
+  name: string,
+): Promise<VirtualFolder> {
   await ensureDriveLibrary({ promptIfMissing: false });
   const now = Date.now();
   const folder: VirtualFolder = {
@@ -299,7 +315,9 @@ export async function renameLibraryFolder(
 export async function deleteLibraryFolder(folderId: string): Promise<void> {
   await updateDriveManifest((manifest) => ({
     ...manifest,
-    virtualFolders: manifest.virtualFolders.filter((folder) => folder.id !== folderId),
+    virtualFolders: manifest.virtualFolders.filter(
+      (folder) => folder.id !== folderId,
+    ),
     books: manifest.books.map((book) =>
       book.virtualFolderId === folderId
         ? { ...book, virtualFolderId: undefined }
@@ -318,9 +336,13 @@ export async function reorderLibraryFolder(
     );
     const index = folders.findIndex((folder) => folder.id === folderId);
     const swapIndex = direction === "up" ? index - 1 : index + 1;
-    if (index < 0 || swapIndex < 0 || swapIndex >= folders.length) return manifest;
+    if (index < 0 || swapIndex < 0 || swapIndex >= folders.length)
+      return manifest;
     const currentOrder = folders[index].sortOrder;
-    folders[index] = { ...folders[index], sortOrder: folders[swapIndex].sortOrder };
+    folders[index] = {
+      ...folders[index],
+      sortOrder: folders[swapIndex].sortOrder,
+    };
     folders[swapIndex] = { ...folders[swapIndex], sortOrder: currentOrder };
     return { ...manifest, virtualFolders: folders };
   });
@@ -361,7 +383,10 @@ export function getStorageErrorMessage(error: unknown): string {
 async function upsertBook(book: BookMeta): Promise<void> {
   await updateDriveManifest((manifest) => ({
     ...manifest,
-    books: [...manifest.books.filter((candidate) => candidate.id !== book.id), book],
+    books: [
+      ...manifest.books.filter((candidate) => candidate.id !== book.id),
+      book,
+    ],
   }));
 }
 
@@ -382,7 +407,8 @@ async function pruneMissingBooks(
       await getDriveFileMetadata(book.driveFileId, "id");
       existingBooks.push(book);
     } catch (error) {
-      if (!(error instanceof DriveApiError) || error.status !== 404) throw error;
+      if (!(error instanceof DriveApiError) || error.status !== 404)
+        throw error;
       await deleteRawBook(book.id);
     }
   }
