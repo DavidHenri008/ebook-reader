@@ -72,7 +72,9 @@ This is the concrete runtime flow the finished app must implement.
    `app-data/` child folder plus `library.json` and `settings.json`, and to recover
    those app-created files on a later visit. Once proven, the app records the folder
    id and metadata file ids, tags app-created files with `appProperties`, and
-   remembers enough local state so later visits skip this step when possible.
+   remembers enough local state so later visits skip this step when possible. After
+   initial setup, the UI must still expose the selected Drive library location and
+   let the user choose a different folder/path from a settings or account surface.
 4. **Library loads.** The app reads its **manifest** (`app-data/library.json`) — the
    **curated list of books the user has added**, plus app-only library folders and
    book-folder assignments — and renders the library. The library is _whatever the
@@ -109,8 +111,8 @@ This is the concrete runtime flow the finished app must implement.
    sub-folder so app metadata is separated from the book files), written via
    `drive.file`.
 10. **Refresh.** The manifest and `settings.json` are re-read on **every app access**
-   and can be re-synced on demand via a **Refresh** button; a manifest entry whose
-   Drive file has been removed (a `404` on fetch) is pruned from the library.
+    and can be re-synced on demand via a **Refresh** button; a manifest entry whose
+    Drive file has been removed (a `404` on fetch) is pruned from the library.
 
 **Drive layout (per user):**
 
@@ -126,28 +128,28 @@ This is the concrete runtime flow the finished app must implement.
 **Book identity:** the internal `bookId` is the **SHA-256 content hash** of the EPUB
 bytes (the IndexedDB cache + per-book settings key). The manifest maps Drive `fileId`
 ↔ `bookId` and also stores the last known Drive fingerprint (`modifiedTime`, `size`,
-  and `md5Checksum` when Drive exposes it, otherwise ETag). Book entries also store an
-  optional app-only `virtualFolderId`; this organizes the UI but never changes the
-  book's Drive parent folder. Adding the same bytes twice de-duplicates; replacing a
-  Drive file with different bytes is treated as a new content version. Picked books may
-  live anywhere in the user's Drive; uploaded books land in the library folder.
+and `md5Checksum` when Drive exposes it, otherwise ETag). Book entries also store an
+optional app-only `virtualFolderId`; this organizes the UI but never changes the
+book's Drive parent folder. Adding the same bytes twice de-duplicates; replacing a
+Drive file with different bytes is treated as a new content version. Picked books may
+live anywhere in the user's Drive; uploaded books land in the library folder.
 
 ---
 
 ## Current state (baseline assessment)
 
-| Area                 | Today                                                                                                   | Cloud target                                                                                                                                                                                        |
-| -------------------- | ------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Hosting model        | Static Vite build + PWA, `base: "./"` in [vite.config.ts](../vite.config.ts)                            | Deploys to Cloudflare Pages as-is (static build, no server rewrites).                                                                                                                               |
-| Routing              | TanStack Router **hash history** in [src/router.tsx](../src/router.tsx)                                 | Hash URLs need **no SPA rewrite rules** — ideal for static hosts.                                                                                                                                   |
-| Auth                 | None                                                                                                    | **Required** Google sign-in (Google Identity Services). The whole app is gated behind a session.                                                                                                    |
-| Book identity        | SHA-256 **content hash** as `id` in [src/storage/library.ts](../src/storage/library.ts)                 | Deterministic key for Drive filenames, dedup, and conflict-free byte storage.                                                                                                                       |
+| Area                 | Today                                                                                                   | Cloud target                                                                                                                                                                                                                                       |
+| -------------------- | ------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Hosting model        | Static Vite build + PWA, `base: "./"` in [vite.config.ts](../vite.config.ts)                            | Deploys to Cloudflare Pages as-is (static build, no server rewrites).                                                                                                                                                                              |
+| Routing              | TanStack Router **hash history** in [src/router.tsx](../src/router.tsx)                                 | Hash URLs need **no SPA rewrite rules** — ideal for static hosts.                                                                                                                                                                                  |
+| Auth                 | None                                                                                                    | **Required** Google sign-in (Google Identity Services). The whole app is gated behind a session.                                                                                                                                                   |
+| Book identity        | SHA-256 **content hash** as `id` in [src/storage/library.ts](../src/storage/library.ts)                 | Deterministic key for Drive filenames, dedup, and conflict-free byte storage.                                                                                                                                                                      |
 | Library storage      | `StoredBook` (incl. `fileData: ArrayBuffer`) in IndexedDB via [src/storage/db.ts](../src/storage/db.ts) | Moves to Drive: a **curated `library.json` manifest** in `app-data/` (books the user adds via the Picker or upload, plus app-only virtual folders and assignments); book files live in a user-picked folder. IndexedDB is no longer authoritative. |
-| Reading state        | `StoredReadingState` in [src/storage/readingState.ts](../src/storage/readingState.ts)                   | Folded into `app-data/settings.json` (theme + per-book position/mode/zoom) in Drive; last-write-wins by `updatedAt`. Writes are debounced.                                                          |
-| Extraction cache     | Derived `extracted-*` stores in [src/storage/bookCache.ts](../src/storage/bookCache.ts)                 | **Kept** in the local IndexedDB cache for fast reopening; **never** uploaded to Drive (size + quota); regenerated from the Drive EPUB on a cache miss.                                              |
-| Networking           | Fully offline; no network for content                                                                   | **Online-only**: network to **Google APIs** is required to load the manifest and validate/open books. A cache hit can avoid the EPUB download, not the signed-in Drive-backed library model.       |
-| Secrets              | None in the client                                                                                      | OAuth **Client ID + Picker API key + App ID are public** and safe in the SPA; any real secret requires the optional backend (Phase 7).                                                              |
-| PWA / service worker | App-shell only in [vite.config.ts](../vite.config.ts)                                                   | Keep app-shell caching for fast loads only; **never** cache API/token responses or user content. No offline reading.                                                                                |
+| Reading state        | `StoredReadingState` in [src/storage/readingState.ts](../src/storage/readingState.ts)                   | Folded into `app-data/settings.json` (theme + per-book position/mode/zoom) in Drive; last-write-wins by `updatedAt`. Writes are debounced.                                                                                                         |
+| Extraction cache     | Derived `extracted-*` stores in [src/storage/bookCache.ts](../src/storage/bookCache.ts)                 | **Kept** in the local IndexedDB cache for fast reopening; **never** uploaded to Drive (size + quota); regenerated from the Drive EPUB on a cache miss.                                                                                             |
+| Networking           | Fully offline; no network for content                                                                   | **Online-only**: network to **Google APIs** is required to load the manifest and validate/open books. A cache hit can avoid the EPUB download, not the signed-in Drive-backed library model.                                                       |
+| Secrets              | None in the client                                                                                      | OAuth **Client ID + Picker API key + App ID are public** and safe in the SPA; any real secret requires the optional backend (Phase 7).                                                                                                             |
+| PWA / service worker | App-shell only in [vite.config.ts](../vite.config.ts)                                                   | Keep app-shell caching for fast loads only; **never** cache API/token responses or user content. No offline reading.                                                                                                                               |
 
 ---
 
@@ -166,7 +168,9 @@ bytes (the IndexedDB cache + per-book settings key). The manifest maps Drive `fi
   number). Picking is expected to grant the access needed for app-created child
   metadata, but this is a required implementation proof before depending on it. The
   choice is remembered (local metadata file ids + manifest state) so it is asked only
-  when recovery fails or the user chooses a different folder.
+  when recovery fails or the user chooses a different folder. The library/account UI
+  must make that later folder/path change possible after the first selection, not only
+  during first-run bootstrap.
 - **Drive URL / origin:** the app is served from the Cloudflare Pages origin
   (`https://<project>.pages.dev`) or a custom domain; hash routes
   (`#/`, `#/reader/<book-title>`) need no server rewrites.
@@ -186,11 +190,11 @@ bytes (the IndexedDB cache + per-book settings key). The manifest maps Drive `fi
   Drive layout. Deleting a virtual folder preserves all books and Drive files by
   clearing or reassigning their folder metadata.
 - **Adding books:** two paths —
-    1. **Add from Drive:** the Google Picker lets the user select existing `.epub`
-      file(s); picking grants `drive.file` access, then the app downloads each selected
-      EPUB once to hash it, extract title/author/cover metadata, store the Drive file
-      fingerprint, and record it in the manifest. This work is progress-visible and
-      concurrency-limited.
+  1. **Add from Drive:** the Google Picker lets the user select existing `.epub`
+     file(s); picking grants `drive.file` access, then the app downloads each selected
+     EPUB once to hash it, extract title/author/cover metadata, store the Drive file
+     fingerprint, and record it in the manifest. This work is progress-visible and
+     concurrency-limited.
   2. **In-app Upload:** pick a local `.epub`; the app uploads it (resumable) into the
      library folder via `drive.file` and records it.
 - **Removing books = forget (not delete):** removing a book drops it from the
@@ -256,14 +260,14 @@ Picker API key, and confirm Cloudflare Pages as the host.
 6. Record the **Client ID**, **API key**, and **project number** (all
    public/non-secret). There is **no client secret** in the SPA path.
 7. Confirm the host: **Cloudflare Pages** (see [Hosting and cost](#hosting-and-cost));
-  optionally a custom domain.
+   optionally a custom domain.
 8. **Drive folder proof:** before Phase 3 implementation, verify the selected-folder
-  model with a minimal scratch/manual test using only `drive.file`: Picker folder
-  select -> create `app-data/` -> create and update `library.json`/`settings.json`
-  with identifying `appProperties` -> reload in a fresh browser profile/account
-  session -> recover the metadata by saved file ids or by listing only the app's
-  accessible files with the `appProperties` marker. If any step fails, stop and
-  revise the storage bootstrap before implementing Phase 3.
+   model with a minimal scratch/manual test using only `drive.file`: Picker folder
+   select -> create `app-data/` -> create and update `library.json`/`settings.json`
+   with identifying `appProperties` -> reload in a fresh browser profile/account
+   session -> recover the metadata by saved file ids or by listing only the app's
+   accessible files with the `appProperties` marker. If any step fails, stop and
+   revise the storage bootstrap before implementing Phase 3.
 
 **Files touched:** docs only (record decisions in this plan or a new
 `docs/cloud-deploy.md`).
@@ -352,9 +356,9 @@ gate implemented in Phase 2.
    (avatar → **Sign out**) on [src/pages/HomePage.tsx](../src/pages/HomePage.tsx)
    and/or the reader toolbar.
 4. **Sign-out:** clear the session/tokens and return to the sign-in screen. For
-  shared-device safety, clear the local extraction cache on sign-out by default. If
-  a later UX keeps caches for fast re-sign-in, namespace cache records by Google
-  `sub` and still expose a **"clear cache"** action.
+   shared-device safety, clear the local extraction cache on sign-out by default. If
+   a later UX keeps caches for fast re-sign-in, namespace cache records by Google
+   `sub` and still expose a **"clear cache"** action.
 
 **Files touched:** new `src/auth/*`, [src/pages/HomePage.tsx](../src/pages/HomePage.tsx),
 [src/main.tsx](../src/main.tsx) (provider), [src/router.tsx](../src/router.tsx)
@@ -383,31 +387,31 @@ manifest, app-only virtual folders, settings) using only `drive.file`.
    single `drive.file` scope. Request the token right after sign-in (or on first
    Drive action). Handle expiry with a silent re-request; handle user denial.
 2. **Google Picker service:** add `src/services/drive/picker.ts` (loads the `gapi`
-  `picker` library; uses the API key + App ID). It provides two flows: **(a) pick
-  the library folder** (folder-select view, only after the Phase 0 folder proof is
-  green) and **(b) pick existing `.epub` file(s)** to add. Picking grants the app
-  `drive.file` access to the selected folder/file records.
+   `picker` library; uses the API key + App ID). It provides two flows: **(a) pick
+   the library folder** (folder-select view, only after the Phase 0 folder proof is
+   green) and **(b) pick existing `.epub` file(s)** to add. Picking grants the app
+   `drive.file` access to the selected folder/file records.
 3. **Folder bootstrap:** on first run, prompt (via the Picker) to choose the library
-  folder; create an `app-data/` sub-folder inside it; create `library.json` and
-  `settings.json` with app-specific `appProperties`; record `folderId`,
-  `manifestFileId`, and `settingsFileId`; persist those ids locally. On later
-  visits, use the saved file ids first; if local state is missing, recover by
-  listing only files visible through `drive.file` with the app's `appProperties`
-  marker. If recovery fails, prompt the user to pick the folder again rather than
-  broadening scopes.
+   folder; create an `app-data/` sub-folder inside it; create `library.json` and
+   `settings.json` with app-specific `appProperties`; record `folderId`,
+   `manifestFileId`, and `settingsFileId`; persist those ids locally. On later
+   visits, use the saved file ids first; if local state is missing, recover by
+   listing only files visible through `drive.file` with the app's `appProperties`
+   marker. If recovery fails, prompt the user to pick the folder again rather than
+   broadening scopes.
 4. **Drive REST client:** add `src/services/drive/driveClient.ts` wrapping the Drive
    v3 REST API — `get`/download, `create`/`update`, and **resumable upload** for EPUB
    bytes (all `drive.file`). It does **not** enumerate arbitrary folder contents and
    has **no delete** method. Centralize `401` (re-auth), `403`/`429`
    (quota/rate-limit) and network handling with **exponential backoff + jitter** here.
 5. **Manifest + settings:** add `src/services/drive/manifest.ts` and
-  `src/services/drive/settings.ts` that read/write `app-data/library.json` and
-  `app-data/settings.json` via `drive.file`. Adding a book appends to the manifest
-  only after the app has a `bookId`, metadata, and Drive fingerprint; **removing
-  forgets it** (drops the entry); a `404` when fetching a referenced file prunes its
-  entry. The manifest service also owns virtual folder CRUD (create/rename/delete/
-  reorder) and book assignment (`virtualFolderId`) updates. These are manifest-only
-  operations and must not call Drive folder create/move APIs.
+   `src/services/drive/settings.ts` that read/write `app-data/library.json` and
+   `app-data/settings.json` via `drive.file`. Adding a book appends to the manifest
+   only after the app has a `bookId`, metadata, and Drive fingerprint; **removing
+   forgets it** (drops the entry); a `404` when fetching a referenced file prunes its
+   entry. The manifest service also owns virtual folder CRUD (create/rename/delete/
+   reorder) and book assignment (`virtualFolderId`) updates. These are manifest-only
+   operations and must not call Drive folder create/move APIs.
 6. **Data mapping in Drive:**
    - `<library folder>/*.epub` — uploaded books (human filenames). Picked books may
      live elsewhere in the user's Drive; the manifest references them by `fileId`.
@@ -456,17 +460,17 @@ there is no offline library.
    backed by the Drive manifest/settings services instead of IndexedDB. Do not keep an
    eager `getBookFile`/route-state contract if it forces an EPUB download before the
    extraction cache is checked. Prefer identity-first APIs such as
-  `getBookMeta(bookId)`, `getAllBooks()`, `getLibraryFolders()`,
-  `setBookVirtualFolder(bookId, virtualFolderId)`,
-  `fetchBookFileForExtraction(bookId)`, and `saveReadingState(bookId, partial)`.
-  `saveReadingState` writes into
+   `getBookMeta(bookId)`, `getAllBooks()`, `getLibraryFolders()`,
+   `setBookVirtualFolder(bookId, virtualFolderId)`,
+   `fetchBookFileForExtraction(bookId)`, and `saveReadingState(bookId, partial)`.
+   `saveReadingState` writes into
    `settings.json` (`perBook`), and `removeBookFromLibrary` now **forgets** the book
    (manifest + local cache) rather than deleting the Drive file.
 2. **Library index:** read `app-data/library.json` once per session into memory (the
-  curated list, virtual folders, and book-folder assignments); update it on
-  add/remove/last-opened/folder CRUD/book move and write back (debounced). Download
-  the book's Drive file (by `fileId`) only from the cache-miss/stale-cache extraction
-  path; a `404` prunes the entry.
+   curated list, virtual folders, and book-folder assignments); update it on
+   add/remove/last-opened/folder CRUD/book move and write back (debounced). Download
+   the book's Drive file (by `fileId`) only from the cache-miss/stale-cache extraction
+   path; a `404` prunes the entry.
 3. **Preferences & reading state:** theme + per-book position/mode/zoom write to
    `app-data/settings.json`, **debounced/coalesced** (e.g. on pause and at most every
    few seconds) to avoid hammering the Drive API with position updates;
@@ -498,8 +502,8 @@ there is no offline library.
    content version and do not serve the old cache. **Remove-from-library** just drops
    the manifest entry + local cache (the Drive file is **never** deleted); a
    referenced file that has vanished (`404`) is pruned the same way. No offline
-  outbox (online-only). Virtual folder deletion updates only manifest metadata and
-  leaves books in the library, typically by clearing their `virtualFolderId`.
+   outbox (online-only). Virtual folder deletion updates only manifest metadata and
+   leaves books in the library, typically by clearing their `virtualFolderId`.
 
 **Files touched:** [src/storage/library.ts](../src/storage/library.ts),
 [src/storage/readingState.ts](../src/storage/readingState.ts),
@@ -541,8 +545,11 @@ add, remove-as-forget, refresh).
 **Steps**
 
 1. Account menu with profile + **Sign out**.
-2. **First-run folder pick:** if no library folder is saved, prompt the user (via the
-   Google Picker) to choose one before showing the (empty) library.
+2. **Drive library location:** if no library folder is saved, prompt the user (via
+   the Google Picker) to choose one before showing the (empty) library. After the
+   first selection, show the current Drive library location in a settings/account
+   surface and provide a **Change Drive folder** action that re-runs folder selection
+   and storage bootstrap for the newly chosen location.
 3. **Add books:** an **Upload** action (pick a local `.epub` → hash/extract metadata
    → resumable upload into the library folder) and an **Add from Drive** action
    (Google Picker → select existing `.epub` file(s) → progress-visible download for
@@ -567,7 +574,7 @@ add, remove-as-forget, refresh).
 8. Surface **quota / rate-limit / permission / network** errors as actionable
    messages (e.g. "Your Google Drive is full", "Too many requests — retrying").
 9. Empty-state guidance for first-time users (pick a Drive folder, then add or upload;
-  app folders can be created later to organize the library).
+   app folders can be created later to organize the library).
 
 **Files touched:** home/reader UI components, a new status/indicator component,
 [src/components/BookCard.tsx](../src/components/BookCard.tsx),
@@ -577,6 +584,8 @@ add, remove-as-forget, refresh).
 
 - First run asks for a library folder; adding via Upload or the Picker shows the book;
   fetch/extract progress shows per book.
+- The settings/account UI shows the current Drive library location and lets the user
+  change it after initial setup.
 - Creating, renaming, deleting, reordering, and moving books into app-only folders
   updates the library view and persists through `library.json`; no Google Drive
   folders are created or modified.
@@ -756,7 +765,7 @@ Workers has a free tier too).
 4. **Environment variables:** add `VITE_GOOGLE_CLIENT_ID`, `VITE_GOOGLE_API_KEY`, and
    `VITE_GOOGLE_PROJECT_NUMBER` for both **Production** and **Preview**.
 5. Add `public/_headers` with the CSP (allow the Google, Emotion, and reader asset
-  requirements from Phase 1).
+   requirements from Phase 1).
    Commit and redeploy.
 6. Deploy; note the `*.pages.dev` URL.
 7. _(Optional)_ **Custom domain:** Pages → _Custom domains_ → add
