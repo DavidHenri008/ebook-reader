@@ -1,13 +1,15 @@
-import type { ReadingState, StoredReadingState, Theme } from "../types/storage";
-import { getDb } from "./db";
+import type { ReadingState, Theme } from "../types/storage";
+import {
+  ensureDriveLibrary,
+  getCachedDriveSettings,
+  updateDriveSettings,
+} from "../services/drive";
 
-const STORE_NAME = "reading-state";
 export const THEME_STORAGE_KEY = "app-theme";
 
-/** Default color theme when none is stored in localStorage. */
 const DEFAULT_THEME: Theme = "dark";
+const SETTINGS_WRITE_DEBOUNCE_MS = 2000;
 
-/** Default reading state for new books */
 const defaultReadingState: ReadingState = {
   lastLocation: undefined,
   zoom: 100,
@@ -23,56 +25,59 @@ export function getCurrentLibraryTheme(): Theme {
   return isTheme(storedTheme) ? storedTheme : DEFAULT_THEME;
 }
 
-/**
- * Save reading state for a book
- * @param bookId Unique identifier for the book (e.g. filename or hash)
- * @param state Reading state to save
- */
+export async function loadLibraryTheme(): Promise<Theme> {
+  await ensureDriveLibrary({ promptIfMissing: false });
+  const settings = getCachedDriveSettings();
+  return settings?.theme ?? getCurrentLibraryTheme();
+}
+
+export async function saveLibraryTheme(theme: Theme): Promise<void> {
+  localStorage.setItem(THEME_STORAGE_KEY, theme);
+  await ensureDriveLibrary({ promptIfMissing: false });
+  await updateDriveSettings(
+    (settings) => ({ ...settings, theme }),
+    SETTINGS_WRITE_DEBOUNCE_MS,
+  );
+}
+
 export async function saveReadingState(
   bookId: string,
   state: Partial<ReadingState>,
 ): Promise<void> {
-  const db = await getDb();
-  const tx = db.transaction(STORE_NAME, "readwrite");
-  const existing = await tx.store.get(bookId);
-
-  const storedState: StoredReadingState = {
-    ...defaultReadingState,
-    ...existing,
-    ...state,
-    bookId,
-    updatedAt: Date.now(),
-  };
-
-  await tx.store.put(storedState);
-  await tx.done;
+  await ensureDriveLibrary({ promptIfMissing: false });
+  await updateDriveSettings(
+    (settings) => ({
+      ...settings,
+      perBook: {
+        ...settings.perBook,
+        [bookId]: {
+          ...defaultReadingState,
+          ...settings.perBook[bookId],
+          ...state,
+          updatedAt: Date.now(),
+        },
+      },
+    }),
+    SETTINGS_WRITE_DEBOUNCE_MS,
+  );
 }
 
-/**
- * Load reading state for a book
- * @param bookId Unique identifier for the book
- * @returns Reading state or default state if not found
- */
 export async function loadReadingState(bookId: string): Promise<ReadingState> {
-  const db = await getDb();
-  const state = await db.get(STORE_NAME, bookId);
-
-  if (!state) {
-    return { ...defaultReadingState };
-  }
-
+  await ensureDriveLibrary({ promptIfMissing: false });
+  const stored = getCachedDriveSettings()?.perBook[bookId];
+  if (!stored) return { ...defaultReadingState };
   return {
-    lastLocation: state.lastLocation,
-    zoom: state.zoom ?? defaultReadingState.zoom,
-    mode: state.mode ?? defaultReadingState.mode,
+    lastLocation: stored.lastLocation,
+    zoom: stored.zoom ?? defaultReadingState.zoom,
+    mode: stored.mode ?? defaultReadingState.mode,
   };
 }
 
-/**
- * Delete the stored reading state for a book.
- * @param bookId Unique identifier for the book
- */
 export async function deleteReadingState(bookId: string): Promise<void> {
-  const db = await getDb();
-  await db.delete(STORE_NAME, bookId);
+  await ensureDriveLibrary({ promptIfMissing: false });
+  await updateDriveSettings((settings) => {
+    const nextPerBook = { ...settings.perBook };
+    delete nextPerBook[bookId];
+    return { ...settings, perBook: nextPerBook };
+  });
 }

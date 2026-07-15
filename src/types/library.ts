@@ -20,12 +20,51 @@ export interface BookMeta {
   addedAt: number;
   /** Last opened date */
   lastOpenedAt?: number;
+  /** Google Drive file id for the EPUB bytes */
+  driveFileId?: string;
+  /** Current Drive metadata fingerprint for cache validation */
+  driveFingerprint?: DriveFileFingerprint;
+  /** App-only library folder assignment */
+  virtualFolderId?: string;
 }
 
-/**
- * Stored book with file data
- */
-export interface StoredBook extends BookMeta {
-  /** EPUB file as ArrayBuffer */
-  fileData: ArrayBuffer;
+export interface DriveFileFingerprint {
+  modifiedTime?: string;
+  size?: string;
+  md5Checksum?: string;
+  version?: string;
+}
+
+export interface VirtualFolder {
+  id: string;
+  name: string;
+  sortOrder: number;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface DriveLibraryManifest {
+  schemaVersion: 1;
+  libraryFolderId: string;
+  libraryFolderName?: string;
+  appDataFolderId: string;
+  manifestFileId?: string;
+  settingsFileId?: string;
+  virtualFolders: VirtualFolder[];
+  books: BookMeta[];
+  updatedAt: number;
+}
+
+export interface DriveLibraryInfo {
+  folderId: string;
+  folderName?: string;
+  appDataFolderId: string;
+  manifestFileId?: string;
+  settingsFileId?: string;
+}
+
+export interface LibrarySnapshot {
+  books: BookMeta[];
+  virtualFolders: VirtualFolder[];
+  info: DriveLibraryInfo;
 }

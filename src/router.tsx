@@ -30,7 +30,7 @@ const homeRoute = createRoute({
 
 const readerRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: "/reader/$bookTitle",
+  path: "/reader/$bookId",
   component: ReaderPage,
 });
 
@@ -55,12 +55,10 @@ declare module "@tanstack/react-router" {
 /**
  * Navigation state carried between the library and the reader. It is held in
  * memory during the session and (like React Router's location state) is not
- * restored after a full page reload; the reader re-extracts from the cached
- * book in that case.
+ * restored after a full page reload; the route book id is the durable source.
  */
 declare module "@tanstack/history" {
   interface HistoryState {
-    file?: File;
     bookId?: string;
     bookTitle?: string;
     theme?: Theme;

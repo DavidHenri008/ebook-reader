@@ -1,10 +1,8 @@
 import { openDB, type IDBPDatabase } from "idb";
-import type { StoredBook } from "../types/library";
-import type { StoredReadingState } from "../types/storage";
 import type { TocItem } from "../types/epub";
 
 const DB_NAME = "epub-reader";
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 // ---- section cache shapes ----
 
@@ -28,15 +26,6 @@ interface StoredSection {
 // ---- schema ----
 
 export interface EpubReaderSchema {
-  library: {
-    key: string;
-    value: StoredBook;
-    indexes: { addedAt: number; lastOpenedAt: number };
-  };
-  "reading-state": {
-    key: string;
-    value: StoredReadingState;
-  };
   "extracted-books-raw": {
     key: string;
     value: StoredMeta;
@@ -56,15 +45,21 @@ export function getDb(): Promise<EpubReaderDB> {
   if (!dbPromise) {
     dbPromise = openDB<EpubReaderSchema>(DB_NAME, DB_VERSION, {
       upgrade(db) {
-        db.createObjectStore("reading-state", { keyPath: "bookId" });
-        const library = db.createObjectStore("library", { keyPath: "id" });
-        library.createIndex("addedAt", "addedAt");
-        library.createIndex("lastOpenedAt", "lastOpenedAt");
-        db.createObjectStore("extracted-books-raw", { keyPath: "bookId" });
-        const sections = db.createObjectStore("extracted-sections", {
-          keyPath: ["bookId", "index"],
-        });
-        sections.createIndex("byBook", "bookId");
+        if (db.objectStoreNames.contains("library")) {
+          db.deleteObjectStore("library");
+        }
+        if (db.objectStoreNames.contains("reading-state")) {
+          db.deleteObjectStore("reading-state");
+        }
+        if (!db.objectStoreNames.contains("extracted-books-raw")) {
+          db.createObjectStore("extracted-books-raw", { keyPath: "bookId" });
+        }
+        if (!db.objectStoreNames.contains("extracted-sections")) {
+          const sections = db.createObjectStore("extracted-sections", {
+            keyPath: ["bookId", "index"],
+          });
+          sections.createIndex("byBook", "bookId");
+        }
       },
     }).then((db) => {
       db.addEventListener("versionchange", () => {

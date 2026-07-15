@@ -4,6 +4,7 @@ import { registerSW } from "virtual:pwa-register";
 import { GlobalStyles } from "./styles";
 import App from "./App";
 import { isNative } from "./platform/platform";
+import { AuthProvider } from "./auth";
 
 // The PWA service worker is only useful for the web target. Inside a native
 // Capacitor WebView it is redundant and can cause stale-cache/update bugs, so
@@ -15,6 +16,8 @@ if (!isNative()) {
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <GlobalStyles />
-    <App />
+    <AuthProvider>
+      <App />
+    </AuthProvider>
   </StrictMode>,
 );

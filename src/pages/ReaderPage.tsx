@@ -62,7 +62,6 @@ const ProgressBody = styled.div`
 //#endregion
 
 interface LocationState {
-  file?: File;
   bookId?: string;
   bookTitle?: string;
   theme?: Theme;
@@ -73,7 +72,6 @@ const ZOOM_MIN = 20;
 const ZOOM_MAX = 400;
 
 interface ReaderBodyProps {
-  file: File | null;
   readingState: ReadingState | null;
   extractedBook: RawExtractedBook | null;
   extractionProgress: string | null;
@@ -92,7 +90,6 @@ interface ReaderBodyProps {
 }
 
 function ReaderBody({
-  file,
   readingState,
   extractedBook,
   extractionProgress,
@@ -109,7 +106,13 @@ function ReaderBody({
   onSectionNavigate,
   onViewportChange,
 }: ReaderBodyProps) {
-  if (!file || !readingState) return null;
+  if (!bookId || !readingState) {
+    return (
+      <ProgressBody>
+        <ProgressText>Loading reading state...</ProgressText>
+      </ProgressBody>
+    );
+  }
 
   if (!extractedBook) {
     return (
@@ -154,11 +157,10 @@ function ReaderBody({
 function ReaderPage() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { bookTitle: routeBookTitle } = useParams({ strict: false });
+  const { bookId: routeBookId } = useParams({ strict: false });
   const locationState = location.state as LocationState | undefined;
 
-  const file = locationState?.file ?? null;
-  const bookId = locationState?.bookId ?? null;
+  const bookId = locationState?.bookId ?? routeBookId ?? null;
   const libraryTheme = useMemo(
     () => locationState?.theme ?? getCurrentLibraryTheme(),
     [locationState?.theme],
@@ -170,7 +172,6 @@ function ReaderPage() {
   const [zoom, setZoom] = useState(100);
   const [mode, setMode] = useState<ReadingMode>("scrolled");
   const { theme, toggleTheme } = useReaderTheme(libraryTheme);
-  const { saveZoom, saveMode, savePosition } = useReaderPersistence(bookId);
   const [viewerViewport, setViewerViewport] = useState<PageViewport | null>(
     null,
   );
@@ -179,12 +180,16 @@ function ReaderPage() {
     extractedBook,
     toc,
     progressMessage: extractionProgress,
-  } = useBookExtraction(file, bookId);
+    resolvedBookId,
+  } = useBookExtraction(bookId);
+
+  const effectiveBookId = resolvedBookId ?? bookId;
+  const { saveZoom, saveMode, savePosition } =
+    useReaderPersistence(effectiveBookId);
 
   const { bookTitle } = useReaderBookTitle(
-    bookId,
+    effectiveBookId,
     locationState?.bookTitle,
-    routeBookTitle,
   );
 
   const sectionTextLengths = useMemo(
@@ -197,7 +202,7 @@ function ReaderPage() {
     viewerViewport,
     zoom,
     theme,
-    bookId,
+    effectiveBookId,
   );
 
   const pagePosition = useMemo(
@@ -215,13 +220,13 @@ function ReaderPage() {
 
   // Load reading state
   useEffect(() => {
-    if (bookId) updateLastOpened(bookId);
-  }, [bookId]);
+    if (effectiveBookId) updateLastOpened(effectiveBookId);
+  }, [effectiveBookId]);
 
   useEffect(() => {
-    if (!bookId) return;
+    if (!effectiveBookId) return;
     let cancelled = false;
-    loadReadingState(bookId).then((state) => {
+    loadReadingState(effectiveBookId).then((state) => {
       if (!cancelled) {
         setReadingState(state);
         setZoom(state.zoom);
@@ -237,7 +242,7 @@ function ReaderPage() {
     return () => {
       cancelled = true;
     };
-  }, [bookId]);
+  }, [effectiveBookId]);
 
   // Persist position changes reported by SectionViewer
   const handlePositionChange = useCallback(
@@ -310,7 +315,7 @@ function ReaderPage() {
     navigate({ to: "/" });
   }, [navigate]);
 
-  const controlsDisabled = !file || !readingState || !extractedBook;
+  const controlsDisabled = !effectiveBookId || !readingState || !extractedBook;
 
   return (
     <Root>
@@ -327,14 +332,13 @@ function ReaderPage() {
         controlsDisabled={controlsDisabled}
       />
       <ReaderBody
-        file={file}
         readingState={readingState}
         extractedBook={extractedBook}
         extractionProgress={extractionProgress}
         toc={toc}
         onNavigate={handleNavigate}
         pagePosition={pagePosition}
-        bookId={bookId}
+        bookId={effectiveBookId}
         currentSection={currentSection}
         anchor={anchor}
         zoom={zoom}

@@ -19,3 +19,14 @@ export interface StoredReadingState extends ReadingState {
   /** Last updated timestamp */
   updatedAt: number;
 }
+
+export interface DriveSettingsBookState extends ReadingState {
+  updatedAt: number;
+}
+
+export interface DriveSettingsDocument {
+  schemaVersion: 1;
+  theme: Theme;
+  perBook: Record<string, DriveSettingsBookState>;
+  updatedAt: number;
+}

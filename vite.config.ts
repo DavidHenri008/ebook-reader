@@ -29,7 +29,7 @@ export default defineConfig({
       manifest: {
         name: "EPUB Reader",
         short_name: "Reader",
-        description: "Local EPUB reader",
+        description: "Google Drive EPUB reader",
         theme_color: "#ffffff",
         background_color: "#ffffff",
         display: "standalone",
@@ -54,9 +54,9 @@ export default defineConfig({
         ],
       },
       workbox: {
-        // Cache app shell only (JS, CSS, HTML)
+        // Cache the static app shell only. Google API responses, OAuth tokens,
+        // Picker frames, and user EPUB content are never runtime-cached here.
         globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
-        // Don't cache EPUB files - they're local
         navigateFallback: "index.html",
         runtimeCaching: [],
       },
