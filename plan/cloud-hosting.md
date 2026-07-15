@@ -32,7 +32,9 @@ regenerated from the Drive EPUB when missing, and can be cleared at any time.
   (chosen once via the Google Picker); small JSON metadata (a **manifest** and a
   **`settings.json`**) live in an `app-data/` sub-folder the app creates there. The
   library is a **curated manifest** the user builds (add/remove), not a raw folder
-  listing. The app stores **zero** user content server-side.
+  listing. App-only library folders for organizing books are stored as metadata in
+  that manifest and are **not** Google Drive folders. The app stores **zero** user
+  content server-side.
 - The derived extraction cache is **not** stored on Drive (too large; it would burn
   Drive quota). It is kept in a **local IndexedDB cache** that persists across
   sessions so reopening a book is fast, and is regenerated from the Drive EPUB when
@@ -72,33 +74,41 @@ This is the concrete runtime flow the finished app must implement.
    id and metadata file ids, tags app-created files with `appProperties`, and
    remembers enough local state so later visits skip this step when possible.
 4. **Library loads.** The app reads its **manifest** (`app-data/library.json`) — the
-   **curated list of books the user has added** — and renders the grid. The library is
-   _whatever the user added_, not a raw listing of the folder.
-5. **Add a book — two ways.** (a) **Add from Drive:** the Google Picker lets the user
-  select existing `.epub` file(s); picking grants `drive.file` access, then the app
-  downloads the selected EPUB once to compute the SHA-256 `bookId`, extract metadata,
-  and store the Drive fingerprint before recording it in the manifest. (b)
-  **Upload:** pick a local `.epub`; the app hashes/extracts metadata locally,
-  uploads it (resumable) into the library folder via `drive.file`, then records it.
-6. **Remove from library = forget (never delete).** Removing a book **drops it from
-  the manifest** (the app forgets its local reference) and clears its local cache;
-  the **file stays in the user's Drive**. Re-adding it later works. True OAuth/app
-  permission revocation is handled in the user's Google account settings, not by
-  this in-app remove action.
-7. **Open a book → validate, then use/build the local cache.** The reader opens from
-  the route `bookId`/manifest entry, not from an in-memory `File` passed during
-  navigation. On open, the app checks the Drive file metadata fingerprint
-  (`modifiedTime`, `size`, and `md5Checksum` or ETag). If the fingerprint still
-  matches and IndexedDB has the extracted book, the reader renders from cache with
-  no EPUB download and no re-extraction. If the cache is missing or the Drive file
-  changed, the app downloads the EPUB bytes, computes the current hash, extracts
-  sections/assets/TOC, updates the manifest if needed, and writes a fresh
-  IndexedDB cache entry.
-8. **Preferences live in Drive.** Theme, per-book reading **position**, reading
+   **curated list of books the user has added**, plus app-only library folders and
+   book-folder assignments — and renders the library. The library is _whatever the
+   user added_, not a raw listing of the Drive folder.
+5. **Organize with app-only folders.** Users can create, rename, delete, and reorder
+   folders inside the library UI, then assign books to those folders. These folders
+   are persisted only as metadata in `library.json` (for example `virtualFolders[]`
+   plus each book's `virtualFolderId`) and are never created as Google Drive folder
+   resources. Moving a book between app folders does **not** move or rename its Drive
+   file. Deleting an app folder does **not** remove books or Drive files; affected
+   books return to the library root / uncategorized view.
+6. **Add a book — two ways.** (a) **Add from Drive:** the Google Picker lets the user
+   select existing `.epub` file(s); picking grants `drive.file` access, then the app
+   downloads the selected EPUB once to compute the SHA-256 `bookId`, extract metadata,
+   and store the Drive fingerprint before recording it in the manifest. (b)
+   **Upload:** pick a local `.epub`; the app hashes/extracts metadata locally,
+   uploads it (resumable) into the library folder via `drive.file`, then records it.
+7. **Remove from library = forget (never delete).** Removing a book **drops it from
+   the manifest** (the app forgets its local reference) and clears its local cache;
+   the **file stays in the user's Drive**. Re-adding it later works. True OAuth/app
+   permission revocation is handled in the user's Google account settings, not by
+   this in-app remove action.
+8. **Open a book → validate, then use/build the local cache.** The reader opens from
+   the route `bookId`/manifest entry, not from an in-memory `File` passed during
+   navigation. On open, the app checks the Drive file metadata fingerprint
+   (`modifiedTime`, `size`, and `md5Checksum` or ETag). If the fingerprint still
+   matches and IndexedDB has the extracted book, the reader renders from cache with
+   no EPUB download and no re-extraction. If the cache is missing or the Drive file
+   changed, the app downloads the EPUB bytes, computes the current hash, extracts
+   sections/assets/TOC, updates the manifest if needed, and writes a fresh
+   IndexedDB cache entry.
+9. **Preferences live in Drive.** Theme, per-book reading **position**, reading
    **mode**, and **zoom** are stored in **`app-data/settings.json`** (in the
    sub-folder so app metadata is separated from the book files), written via
    `drive.file`.
-9. **Refresh.** The manifest and `settings.json` are re-read on **every app access**
+10. **Refresh.** The manifest and `settings.json` are re-read on **every app access**
    and can be re-synced on demand via a **Refresh** button; a manifest entry whose
    Drive file has been removed (a `404` on fetch) is pruned from the library.
 
@@ -109,17 +119,18 @@ This is the concrete runtime flow the finished app must implement.
   ├─ Book One.epub           ← in-app Upload lands here; picked books may live elsewhere
   ├─ Book Two.epub
   └─ app-data/               ← app-created sub-folder: metadata, separated from books
-       ├─ library.json       ← curated manifest: folderId + (bookId(hash) ↔ Drive fileId + title/author/cover/size/timestamps)
+    ├─ library.json       ← curated manifest: Drive folderId + virtualFolders[] + books[] (bookId(hash) ↔ Drive fileId + metadata + virtualFolderId)
        └─ settings.json      ← { theme, perBook: { [bookId]: { location, mode, zoom } } }
 ```
 
 **Book identity:** the internal `bookId` is the **SHA-256 content hash** of the EPUB
 bytes (the IndexedDB cache + per-book settings key). The manifest maps Drive `fileId`
 ↔ `bookId` and also stores the last known Drive fingerprint (`modifiedTime`, `size`,
-and `md5Checksum` when Drive exposes it, otherwise ETag). Adding the same bytes twice
-de-duplicates; replacing a Drive file with different bytes is treated as a new
-content version. Picked books may live anywhere in the user's Drive; uploaded books
-land in the library folder.
+  and `md5Checksum` when Drive exposes it, otherwise ETag). Book entries also store an
+  optional app-only `virtualFolderId`; this organizes the UI but never changes the
+  book's Drive parent folder. Adding the same bytes twice de-duplicates; replacing a
+  Drive file with different bytes is treated as a new content version. Picked books may
+  live anywhere in the user's Drive; uploaded books land in the library folder.
 
 ---
 
@@ -131,7 +142,7 @@ land in the library folder.
 | Routing              | TanStack Router **hash history** in [src/router.tsx](../src/router.tsx)                                 | Hash URLs need **no SPA rewrite rules** — ideal for static hosts.                                                                                                                                   |
 | Auth                 | None                                                                                                    | **Required** Google sign-in (Google Identity Services). The whole app is gated behind a session.                                                                                                    |
 | Book identity        | SHA-256 **content hash** as `id` in [src/storage/library.ts](../src/storage/library.ts)                 | Deterministic key for Drive filenames, dedup, and conflict-free byte storage.                                                                                                                       |
-| Library storage      | `StoredBook` (incl. `fileData: ArrayBuffer`) in IndexedDB via [src/storage/db.ts](../src/storage/db.ts) | Moves to Drive: a **curated `library.json` manifest** in `app-data/` (books the user adds via the Picker or upload); book files live in a user-picked folder. IndexedDB is no longer authoritative. |
+| Library storage      | `StoredBook` (incl. `fileData: ArrayBuffer`) in IndexedDB via [src/storage/db.ts](../src/storage/db.ts) | Moves to Drive: a **curated `library.json` manifest** in `app-data/` (books the user adds via the Picker or upload, plus app-only virtual folders and assignments); book files live in a user-picked folder. IndexedDB is no longer authoritative. |
 | Reading state        | `StoredReadingState` in [src/storage/readingState.ts](../src/storage/readingState.ts)                   | Folded into `app-data/settings.json` (theme + per-book position/mode/zoom) in Drive; last-write-wins by `updatedAt`. Writes are debounced.                                                          |
 | Extraction cache     | Derived `extracted-*` stores in [src/storage/bookCache.ts](../src/storage/bookCache.ts)                 | **Kept** in the local IndexedDB cache for fast reopening; **never** uploaded to Drive (size + quota); regenerated from the Drive EPUB on a cache miss.                                              |
 | Networking           | Fully offline; no network for content                                                                   | **Online-only**: network to **Google APIs** is required to load the manifest and validate/open books. A cache hit can avoid the EPUB download, not the signed-in Drive-backed library model.       |
@@ -168,6 +179,12 @@ land in the library folder.
   has added (tracked in `app-data/library.json`), **not** a raw listing of the folder.
   Because `drive.file` only exposes app-created or user-picked files, the app cannot
   (and does not) enumerate arbitrary folder contents.
+- **Virtual library folders:** users can organize books into app-only folders tracked
+  in `app-data/library.json` (`virtualFolders[]` + per-book `virtualFolderId`). These
+  folders are UI/manifest metadata only: the app must **not** create Google Drive
+  folders, move Drive files, or imply that virtual organization changes the user's
+  Drive layout. Deleting a virtual folder preserves all books and Drive files by
+  clearing or reassigning their folder metadata.
 - **Adding books:** two paths —
     1. **Add from Drive:** the Google Picker lets the user select existing `.epub`
       file(s); picking grants `drive.file` access, then the app downloads each selected
@@ -358,7 +375,7 @@ gate implemented in Phase 2.
 
 **Goal:** Let the user pick a library folder via the Google Picker, create the
 `app-data/` sub-folder, and read/write the curated library (add via Picker/upload,
-manifest, settings) using only `drive.file`.
+manifest, app-only virtual folders, settings) using only `drive.file`.
 
 **Steps**
 
@@ -388,13 +405,17 @@ manifest, settings) using only `drive.file`.
   `app-data/settings.json` via `drive.file`. Adding a book appends to the manifest
   only after the app has a `bookId`, metadata, and Drive fingerprint; **removing
   forgets it** (drops the entry); a `404` when fetching a referenced file prunes its
-  entry.
+  entry. The manifest service also owns virtual folder CRUD (create/rename/delete/
+  reorder) and book assignment (`virtualFolderId`) updates. These are manifest-only
+  operations and must not call Drive folder create/move APIs.
 6. **Data mapping in Drive:**
    - `<library folder>/*.epub` — uploaded books (human filenames). Picked books may
      live elsewhere in the user's Drive; the manifest references them by `fileId`.
-   - `app-data/library.json` — the **curated manifest**: `folderId`, metadata file ids,
-     schema version, and (`bookId` ↔ Drive `fileId` + `BookMeta`: title, author,
-     `coverRef`, file size, timestamps, Drive fingerprint).
+   - `app-data/library.json` — the **curated manifest**: Drive `folderId`, metadata
+     file ids, schema version, `virtualFolders[]` (stable id, name, sort/order,
+     timestamps), and `books[]` (`bookId` ↔ Drive `fileId` + `BookMeta`: title,
+     author, `coverRef`, file size, timestamps, Drive fingerprint, optional
+     `virtualFolderId`). Virtual folders are not Drive resources.
    - `app-data/settings.json` — theme + `perBook: { [bookId]: { location, mode, zoom } }`
      (last-write-wins by `updatedAt`).
    - **Never stored in Drive:** the derived extraction cache — kept in the local
@@ -413,6 +434,9 @@ manifest, settings) using only `drive.file`.
   added after hashing/metadata extraction.
 - **Removing** a book forgets it (drops the manifest entry) and leaves the Drive file
   intact.
+- Creating/renaming/deleting virtual library folders updates only `library.json`;
+  no Google Drive folder is created, renamed, moved, or deleted. Book folder
+  assignments persist across reloads.
 - The manifest and `settings.json` are created/updated in `app-data/`; only
   `drive.file` is used; metadata recovery works from saved file ids or appProperties.
 
@@ -432,14 +456,17 @@ there is no offline library.
    backed by the Drive manifest/settings services instead of IndexedDB. Do not keep an
    eager `getBookFile`/route-state contract if it forces an EPUB download before the
    extraction cache is checked. Prefer identity-first APIs such as
-   `getBookMeta(bookId)`, `getAllBooks()`, `fetchBookFileForExtraction(bookId)`, and
-   `saveReadingState(bookId, partial)`. `saveReadingState` writes into
+  `getBookMeta(bookId)`, `getAllBooks()`, `getLibraryFolders()`,
+  `setBookVirtualFolder(bookId, virtualFolderId)`,
+  `fetchBookFileForExtraction(bookId)`, and `saveReadingState(bookId, partial)`.
+  `saveReadingState` writes into
    `settings.json` (`perBook`), and `removeBookFromLibrary` now **forgets** the book
    (manifest + local cache) rather than deleting the Drive file.
 2. **Library index:** read `app-data/library.json` once per session into memory (the
-   curated list); update it on add/remove/last-opened and write back (debounced).
-   Download the book's Drive file (by `fileId`) only from the cache-miss/stale-cache
-   extraction path; a `404` prunes the entry.
+  curated list, virtual folders, and book-folder assignments); update it on
+  add/remove/last-opened/folder CRUD/book move and write back (debounced). Download
+  the book's Drive file (by `fileId`) only from the cache-miss/stale-cache extraction
+  path; a `404` prunes the entry.
 3. **Preferences & reading state:** theme + per-book position/mode/zoom write to
    `app-data/settings.json`, **debounced/coalesced** (e.g. on pause and at most every
    few seconds) to avoid hammering the Drive API with position updates;
@@ -471,7 +498,8 @@ there is no offline library.
    content version and do not serve the old cache. **Remove-from-library** just drops
    the manifest entry + local cache (the Drive file is **never** deleted); a
    referenced file that has vanished (`404`) is pruned the same way. No offline
-   outbox (online-only).
+  outbox (online-only). Virtual folder deletion updates only manifest metadata and
+  leaves books in the library, typically by clearing their `virtualFolderId`.
 
 **Files touched:** [src/storage/library.ts](../src/storage/library.ts),
 [src/storage/readingState.ts](../src/storage/readingState.ts),
@@ -487,6 +515,8 @@ extraction-cache stores), [src/storage/bookCache.ts](../src/storage/bookCache.ts
 
 - Add a book on device A (pick or upload) → it appears and opens on device B (same
   account), downloaded from Drive.
+- Create/rename/delete a virtual library folder and move a book into it on device A →
+  the same folder organization appears on device B, with no Drive folder created.
 - Theme + reading position/mode persist to `settings.json` and restore on another
   device.
 - Removing a book forgets it (manifest + local cache) and leaves the Drive file
@@ -505,7 +535,8 @@ extraction-cache stores), [src/storage/bookCache.ts](../src/storage/bookCache.ts
 
 ## Phase 5 — Library & account UX
 
-**Goal:** Clear cloud-native library UX (folder pick, add, remove-as-forget, refresh).
+**Goal:** Clear cloud-native library UX (Drive folder pick, app-only library folders,
+add, remove-as-forget, refresh).
 
 **Steps**
 
@@ -513,23 +544,30 @@ extraction-cache stores), [src/storage/bookCache.ts](../src/storage/bookCache.ts
 2. **First-run folder pick:** if no library folder is saved, prompt the user (via the
    Google Picker) to choose one before showing the (empty) library.
 3. **Add books:** an **Upload** action (pick a local `.epub` → hash/extract metadata
-  → resumable upload into the library folder) and an **Add from Drive** action
-  (Google Picker → select existing `.epub` file(s) → progress-visible download for
-  hash/metadata/fingerprint). Concurrency-limit add/pre-extract work so multi-select
-  does not saturate Drive or memory.
-4. **Remove from library:** a per-book **Remove** action on
+   → resumable upload into the library folder) and an **Add from Drive** action
+   (Google Picker → select existing `.epub` file(s) → progress-visible download for
+   hash/metadata/fingerprint). Concurrency-limit add/pre-extract work so multi-select
+   does not saturate Drive or memory.
+4. **Organize books:** provide app-only library folder controls: create, rename,
+   delete, reorder, and move books between the root / uncategorized view and virtual
+   folders. The UI copy should make the boundary explicit when needed: these folders
+   organize the app's library only; they do **not** create Google Drive folders or
+   move Drive files. Deleting a virtual folder keeps its books and returns them to the
+   root / uncategorized view.
+5. **Remove from library:** a per-book **Remove** action on
    [src/components/BookCard.tsx](../src/components/BookCard.tsx) that **forgets** the
    book (drops the manifest entry + clears its local cache). Use explicit copy —
    e.g. "Remove from library (keeps the file in your Drive)" — so users know it is
    **not** a Drive delete and not a Google app-permission revocation.
-5. Per-book status: **in library**, **validating**, **downloading**, **extracting**,
+6. Per-book status: **in library**, **validating**, **downloading**, **extracting**,
    **ready** — reflecting the metadata-check/fetch/extract pipeline.
-6. A global **status** indicator (loading library / saving settings / error) and a
+7. A global **status** indicator (loading library / saving settings / error) and a
    manual **Refresh** that reloads `library.json` + `settings.json` and prunes any
    entries whose Drive file is gone.
-7. Surface **quota / rate-limit / permission / network** errors as actionable
+8. Surface **quota / rate-limit / permission / network** errors as actionable
    messages (e.g. "Your Google Drive is full", "Too many requests — retrying").
-8. Empty-state guidance for first-time users (pick a folder, then add or upload).
+9. Empty-state guidance for first-time users (pick a Drive folder, then add or upload;
+  app folders can be created later to organize the library).
 
 **Files touched:** home/reader UI components, a new status/indicator component,
 [src/components/BookCard.tsx](../src/components/BookCard.tsx),
@@ -539,6 +577,9 @@ extraction-cache stores), [src/storage/bookCache.ts](../src/storage/bookCache.ts
 
 - First run asks for a library folder; adding via Upload or the Picker shows the book;
   fetch/extract progress shows per book.
+- Creating, renaming, deleting, reordering, and moving books into app-only folders
+  updates the library view and persists through `library.json`; no Google Drive
+  folders are created or modified.
 - **Remove** forgets a book (manifest + cache) and leaves the Drive file intact; the
   wording makes that clear.
 - Quota/rate-limit/permission errors are surfaced with clear, actionable text.
