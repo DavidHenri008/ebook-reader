@@ -4,8 +4,9 @@ This plan turns the existing PWA into a **cloud-hosted web app** that:
 
 - requires users to **sign in with Google** (Google Identity Services),
 - stores each user's EPUB library in **their own Google Drive** (per-user storage),
-- reads and renders EPUBs **directly from Drive** — there is no local library and
-  no offline mode.
+- opens EPUBs from Drive-backed library records — there is no local library and
+  no offline mode, though a validated local extraction cache can avoid repeated
+  EPUB downloads.
 
 Google Drive is the **single source of truth** for user content. Nothing a user
 imports or reads is stored on an application-owned server. The browser keeps a
@@ -34,8 +35,8 @@ regenerated from the Drive EPUB when missing, and can be cleared at any time.
   listing. The app stores **zero** user content server-side.
 - The derived extraction cache is **not** stored on Drive (too large; it would burn
   Drive quota). It is kept in a **local IndexedDB cache** that persists across
-  sessions so reopening a book is fast, and is regenerated from the Drive EPUB only
-  when missing.
+  sessions so reopening a book is fast, and is regenerated from the Drive EPUB when
+  missing or when the Drive file fingerprint changes.
 
 Result: hosting can be **$0** on Cloudflare Pages (plus an optional ~$10/yr domain).
 A thin optional backend (BFF) is described in Phase 7 for refresh tokens or
@@ -64,23 +65,35 @@ This is the concrete runtime flow the finished app must implement.
    never see the rest of the user's Drive.
 3. **First run → choose the library folder.** The very first time (no folder saved),
    the app opens the **Google Picker** and asks the user to **select the Drive folder
-   to manage books in**. Picking it grants `drive.file` access to that folder; the app
-   creates an `app-data/` sub-folder there, records the folder id in the manifest, and
-   remembers it locally so later visits skip this step (it can also re-find its
-   `library.json` among its `drive.file`-accessible files).
+   to manage books in**. The implementation must first prove, using only
+   `drive.file`, that the picked folder allows the app to create/update the
+   `app-data/` child folder plus `library.json` and `settings.json`, and to recover
+   those app-created files on a later visit. Once proven, the app records the folder
+   id and metadata file ids, tags app-created files with `appProperties`, and
+   remembers enough local state so later visits skip this step when possible.
 4. **Library loads.** The app reads its **manifest** (`app-data/library.json`) — the
    **curated list of books the user has added** — and renders the grid. The library is
    _whatever the user added_, not a raw listing of the folder.
 5. **Add a book — two ways.** (a) **Add from Drive:** the Google Picker lets the user
-   select existing `.epub` file(s); picking grants `drive.file` access and the app
-   records them in the manifest. (b) **Upload:** pick a local `.epub`; the app uploads
-   it (resumable) into the library folder via `drive.file` and records it.
+  select existing `.epub` file(s); picking grants `drive.file` access, then the app
+  downloads the selected EPUB once to compute the SHA-256 `bookId`, extract metadata,
+  and store the Drive fingerprint before recording it in the manifest. (b)
+  **Upload:** pick a local `.epub`; the app hashes/extracts metadata locally,
+  uploads it (resumable) into the library folder via `drive.file`, then records it.
 6. **Remove from library = forget (never delete).** Removing a book **drops it from
-   the manifest** (the app relinquishes its reference/access) and clears its local
-   cache; the **file stays in the user's Drive**. Re-adding it later works.
-7. **Open a book → build the local cache.** On first open the app downloads the EPUB
-   bytes and extracts sections/assets/TOC into the browser's **IndexedDB** cache.
-   Later opens read from IndexedDB (no re-download, no re-extraction) for fast start.
+  the manifest** (the app forgets its local reference) and clears its local cache;
+  the **file stays in the user's Drive**. Re-adding it later works. True OAuth/app
+  permission revocation is handled in the user's Google account settings, not by
+  this in-app remove action.
+7. **Open a book → validate, then use/build the local cache.** The reader opens from
+  the route `bookId`/manifest entry, not from an in-memory `File` passed during
+  navigation. On open, the app checks the Drive file metadata fingerprint
+  (`modifiedTime`, `size`, and `md5Checksum` or ETag). If the fingerprint still
+  matches and IndexedDB has the extracted book, the reader renders from cache with
+  no EPUB download and no re-extraction. If the cache is missing or the Drive file
+  changed, the app downloads the EPUB bytes, computes the current hash, extracts
+  sections/assets/TOC, updates the manifest if needed, and writes a fresh
+  IndexedDB cache entry.
 8. **Preferences live in Drive.** Theme, per-book reading **position**, reading
    **mode**, and **zoom** are stored in **`app-data/settings.json`** (in the
    sub-folder so app metadata is separated from the book files), written via
@@ -102,8 +115,11 @@ This is the concrete runtime flow the finished app must implement.
 
 **Book identity:** the internal `bookId` is the **SHA-256 content hash** of the EPUB
 bytes (the IndexedDB cache + per-book settings key). The manifest maps Drive `fileId`
-↔ `bookId`, so adding the same book twice de-duplicates. Picked books may live
-anywhere in the user's Drive; uploaded books land in the library folder.
+↔ `bookId` and also stores the last known Drive fingerprint (`modifiedTime`, `size`,
+and `md5Checksum` when Drive exposes it, otherwise ETag). Adding the same bytes twice
+de-duplicates; replacing a Drive file with different bytes is treated as a new
+content version. Picked books may live anywhere in the user's Drive; uploaded books
+land in the library folder.
 
 ---
 
@@ -111,14 +127,14 @@ anywhere in the user's Drive; uploaded books land in the library folder.
 
 | Area                 | Today                                                                                                   | Cloud target                                                                                                                                                                                        |
 | -------------------- | ------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Hosting model        | Static Vite build + PWA, `base: "./"` in [vite.config.ts](../vite.config.ts)                            | Deploys to Cloudflare Pages as-is (static build, no server rewrites).                                                                                                                     |
+| Hosting model        | Static Vite build + PWA, `base: "./"` in [vite.config.ts](../vite.config.ts)                            | Deploys to Cloudflare Pages as-is (static build, no server rewrites).                                                                                                                               |
 | Routing              | TanStack Router **hash history** in [src/router.tsx](../src/router.tsx)                                 | Hash URLs need **no SPA rewrite rules** — ideal for static hosts.                                                                                                                                   |
 | Auth                 | None                                                                                                    | **Required** Google sign-in (Google Identity Services). The whole app is gated behind a session.                                                                                                    |
 | Book identity        | SHA-256 **content hash** as `id` in [src/storage/library.ts](../src/storage/library.ts)                 | Deterministic key for Drive filenames, dedup, and conflict-free byte storage.                                                                                                                       |
 | Library storage      | `StoredBook` (incl. `fileData: ArrayBuffer`) in IndexedDB via [src/storage/db.ts](../src/storage/db.ts) | Moves to Drive: a **curated `library.json` manifest** in `app-data/` (books the user adds via the Picker or upload); book files live in a user-picked folder. IndexedDB is no longer authoritative. |
 | Reading state        | `StoredReadingState` in [src/storage/readingState.ts](../src/storage/readingState.ts)                   | Folded into `app-data/settings.json` (theme + per-book position/mode/zoom) in Drive; last-write-wins by `updatedAt`. Writes are debounced.                                                          |
 | Extraction cache     | Derived `extracted-*` stores in [src/storage/bookCache.ts](../src/storage/bookCache.ts)                 | **Kept** in the local IndexedDB cache for fast reopening; **never** uploaded to Drive (size + quota); regenerated from the Drive EPUB on a cache miss.                                              |
-| Networking           | Fully offline; no network for content                                                                   | **Online-only**: network to **Google APIs** is required to load the manifest, download, and render books.                                                                                           |
+| Networking           | Fully offline; no network for content                                                                   | **Online-only**: network to **Google APIs** is required to load the manifest and validate/open books. A cache hit can avoid the EPUB download, not the signed-in Drive-backed library model.       |
 | Secrets              | None in the client                                                                                      | OAuth **Client ID + Picker API key + App ID are public** and safe in the SPA; any real secret requires the optional backend (Phase 7).                                                              |
 | PWA / service worker | App-shell only in [vite.config.ts](../vite.config.ts)                                                   | Keep app-shell caching for fast loads only; **never** cache API/token responses or user content. No offline reading.                                                                                |
 
@@ -131,12 +147,15 @@ anywhere in the user's Drive; uploaded books land in the library folder.
   backend is added.
 - **Storage backend:** the user's own **Google Drive**. On first run the user
   **picks a library folder** via the Google Picker; the app creates an
-  **`app-data/` sub-folder** there for the manifest and settings.
+  **`app-data/` sub-folder** there for the manifest and settings only after the
+  `drive.file` folder-child create/update/recovery behavior has been proven.
 - **First-run folder selection:** the very first visit (no saved folder) prompts the
   user, via the **Google Picker**, to choose the Drive folder to manage books in
   (the Picker needs the Picker API, a public API key, and your App ID / Cloud project
-  number). Picking grants `drive.file` access to that folder; the choice is remembered
-  (locally + in the manifest) so it's asked only once.
+  number). Picking is expected to grant the access needed for app-created child
+  metadata, but this is a required implementation proof before depending on it. The
+  choice is remembered (local metadata file ids + manifest state) so it is asked only
+  when recovery fails or the user chooses a different folder.
 - **Drive URL / origin:** the app is served from the Cloudflare Pages origin
   (`https://<project>.pages.dev`) or a custom domain; hash routes
   (`#/`, `#/reader/<book-title>`) need no server rewrites.
@@ -150,21 +169,27 @@ anywhere in the user's Drive; uploaded books land in the library folder.
   Because `drive.file` only exposes app-created or user-picked files, the app cannot
   (and does not) enumerate arbitrary folder contents.
 - **Adding books:** two paths —
-  1. **Add from Drive:** the Google Picker lets the user select existing `.epub`
-     file(s); picking grants `drive.file` access and the app records them in the
-     manifest.
+    1. **Add from Drive:** the Google Picker lets the user select existing `.epub`
+      file(s); picking grants `drive.file` access, then the app downloads each selected
+      EPUB once to hash it, extract title/author/cover metadata, store the Drive file
+      fingerprint, and record it in the manifest. This work is progress-visible and
+      concurrency-limited.
   2. **In-app Upload:** pick a local `.epub`; the app uploads it (resumable) into the
      library folder via `drive.file` and records it.
 - **Removing books = forget (not delete):** removing a book drops it from the
-  manifest (the app relinquishes its reference/access) and clears its local cache;
-  the **Drive file is never deleted**, which makes an in-app "remove" safe.
+  manifest (the app forgets the local reference) and clears its local cache; the
+  **Drive file is never deleted**, which makes an in-app "remove" safe. This does
+  not revoke Google-side app permissions; users can revoke the app from their Google
+  account if they want to remove previously granted access.
 - **Preferences:** theme + per-book position/mode/zoom persist to
   **`app-data/settings.json`**; the curated **manifest** persists to
   **`app-data/library.json`**. Both are re-read on every app access and via a
   **Refresh** button.
 - **Book identity:** internal `bookId` = SHA-256 content hash (cache + settings key);
-  the manifest maps Drive `fileId` ↔ `bookId`, so re-adding the same book
-  de-duplicates.
+  the manifest maps Drive `fileId` ↔ `bookId` and stores a Drive fingerprint
+  (`modifiedTime`, `size`, and `md5Checksum` or ETag). Re-adding identical bytes
+  de-duplicates; changed Drive bytes invalidate the old cache and produce a new
+  content version.
 - **Identity scopes:** `openid email profile`.
 - **Auth model:** browser-only **token model** (GIS `initTokenClient`, PKCE).
   Short-lived access tokens, silently re-requested. **No** refresh token in the
@@ -182,7 +207,9 @@ anywhere in the user's Drive; uploaded books land in the library folder.
 - **Concurrency:** **last-write-wins** by `updatedAt` / Drive `modifiedTime` for the
   small JSON indexes. EPUB bytes are content-hash-addressed, so they never conflict.
 - **Data ownership:** all user content lives in the user's Drive. The app stores
-  **no** user content server-side. Sign-out clears tokens and the local cache.
+  **no** user content server-side. Sign-out clears tokens. The local extraction cache
+  must either be cleared on sign-out by default or be namespaced by Google `sub` and
+  exposed through a clear-cache action; do not keep a cross-account cache.
 
 ---
 
@@ -212,7 +239,14 @@ Picker API key, and confirm Cloudflare Pages as the host.
 6. Record the **Client ID**, **API key**, and **project number** (all
    public/non-secret). There is **no client secret** in the SPA path.
 7. Confirm the host: **Cloudflare Pages** (see [Hosting and cost](#hosting-and-cost));
-   optionally a custom domain.
+  optionally a custom domain.
+8. **Drive folder proof:** before Phase 3 implementation, verify the selected-folder
+  model with a minimal scratch/manual test using only `drive.file`: Picker folder
+  select -> create `app-data/` -> create and update `library.json`/`settings.json`
+  with identifying `appProperties` -> reload in a fresh browser profile/account
+  session -> recover the metadata by saved file ids or by listing only the app's
+  accessible files with the `appProperties` marker. If any step fails, stop and
+  revise the storage bootstrap before implementing Phase 3.
 
 **Files touched:** docs only (record decisions in this plan or a new
 `docs/cloud-deploy.md`).
@@ -221,6 +255,8 @@ Picker API key, and confirm Cloudflare Pages as the host.
 
 - A **Web** OAuth Client ID and a **Picker API key** exist; the consent screen
   requests only `drive.file` (non-sensitive) with test users added.
+- The `drive.file` folder proof is documented: child metadata creation/update and
+  later recovery work, or the plan is revised before Phase 3.
 - No source/build changes; `npm run build`, `npm run lint`, `npm test` unaffected.
 
 ---
@@ -228,7 +264,8 @@ Picker API key, and confirm Cloudflare Pages as the host.
 ## Phase 1 — Make the SPA cloud/deploy-ready (config, env, headers)
 
 **Goal:** The static build deploys cleanly to Cloudflare Pages and reads the OAuth
-Client ID and Picker API key from the environment, behind a required sign-in gate.
+Client ID and Picker API key from the environment, ready for the required sign-in
+gate implemented in Phase 2.
 
 **Steps**
 
@@ -239,20 +276,30 @@ Client ID and Picker API key from the environment, behind a required sign-in gat
 2. **Routing/base sanity:** confirm hash routing + `base: "./"` in
    [vite.config.ts](../vite.config.ts) work on Cloudflare Pages. No SPA fallback rule
    is needed with hash routing.
-3. **Security headers / CSP:** add a Content-Security-Policy that allows only what
-   Google Identity, Drive, and the Picker need and nothing else:
-   - `script-src` → `'self' https://accounts.google.com/gsi/client https://apis.google.com`
-   - `connect-src` → `'self' https://www.googleapis.com https://content.googleapis.com https://oauth2.googleapis.com https://accounts.google.com`
-   - `frame-src` → `https://accounts.google.com https://docs.google.com` (the Picker
+3. **Security headers / CSP:** add a Content-Security-Policy that allows Google
+   Identity, Drive, the Picker, Emotion styles, and reader data/blob assets without
+   opening unrelated origins:
+   - `default-src` -> `'self'`
+   - `script-src` -> `'self' https://accounts.google.com/gsi/client https://apis.google.com`
+   - `connect-src` -> `'self' https://www.googleapis.com https://content.googleapis.com https://oauth2.googleapis.com https://accounts.google.com`
+   - `frame-src` -> `https://accounts.google.com https://docs.google.com` (the Picker
      renders in a `docs.google.com` iframe)
-   - `frame-ancestors` → `'self'`
-     Provide this via `public/_headers` for Cloudflare (with a `<meta http-equiv>`
-     fallback in [index.html](../index.html)). Keep the PWA app-shell cache; ensure
-     Drive/token/Picker responses are **network-only** (never precached or
-     runtime-cached).
-4. **Auth gate:** unauthenticated users see a **sign-in screen**; the library and
-   reader are only reachable once a Google session exists. There is no local-only
-   mode.
+   - `style-src` -> `'self' 'unsafe-inline'` (Emotion runtime styles; tighten only if
+     the app moves to a nonce/hash-based CSP)
+   - `img-src` -> `'self' data: blob: https://lh3.googleusercontent.com https://*.googleusercontent.com`
+   - `font-src` -> `'self' data: blob:`
+   - `worker-src` -> `'self' blob:`
+   - `manifest-src` -> `'self'`; `base-uri` -> `'self'`; `object-src` -> `'none'`
+   - `frame-ancestors` -> `'self'` (must be in the HTTP header; a meta CSP fallback
+     cannot enforce `frame-ancestors`)
+     Provide the enforcing policy via `public/_headers` for Cloudflare. A
+     `<meta http-equiv>` fallback in [index.html](../index.html) may cover the
+     directives browsers honor in meta CSP, but the header is authoritative. Keep the
+     PWA app-shell cache; ensure Drive/token/Picker responses are **network-only**
+     (never precached or runtime-cached).
+4. **Auth readiness:** centralize env/config validation so Phase 2 can fail closed
+   when the Client ID, Picker API key, or project number is missing. The actual
+   sign-in gate is implemented and verified in Phase 2.
 
 **Files touched:** new `.env.example`, [src/vite-env.d.ts](../src/vite-env.d.ts),
 [vite.config.ts](../vite.config.ts), new `public/_headers`, possibly
@@ -261,10 +308,10 @@ Client ID and Picker API key from the environment, behind a required sign-in gat
 **Acceptance criteria**
 
 - `npm run build`, `npm run lint`, `npm test` pass.
-- `npm run preview` shows the **sign-in gate** when signed-out; no library/reader is
-  reachable without a session.
+- `npm run preview` serves the existing app with the Cloudflare header file present
+  and without requiring server rewrites.
 - The Client ID + Picker API key are read from env; CSP allows the Google + Picker
-  endpoints and blocks others.
+  endpoints, Emotion styles, data/blob reader assets, and blocks unrelated origins.
 - The PWA still installs and caches only the app shell (no offline book reading).
 
 ---
@@ -287,9 +334,10 @@ Client ID and Picker API key from the environment, behind a required sign-in gat
    with Google"** screen; signed-in users reach the library. Add an account menu
    (avatar → **Sign out**) on [src/pages/HomePage.tsx](../src/pages/HomePage.tsx)
    and/or the reader toolbar.
-4. **Sign-out:** clear the session/tokens and return to the sign-in screen. The
-   local IndexedDB extraction cache (keyed by content hash) may be **kept** for fast
-   re-sign-in; expose a **"clear cache"** action for shared devices.
+4. **Sign-out:** clear the session/tokens and return to the sign-in screen. For
+  shared-device safety, clear the local extraction cache on sign-out by default. If
+  a later UX keeps caches for fast re-sign-in, namespace cache records by Google
+  `sub` and still expose a **"clear cache"** action.
 
 **Files touched:** new `src/auth/*`, [src/pages/HomePage.tsx](../src/pages/HomePage.tsx),
 [src/main.tsx](../src/main.tsx) (provider), [src/router.tsx](../src/router.tsx)
@@ -300,7 +348,8 @@ Client ID and Picker API key from the environment, behind a required sign-in gat
 
 - The app is unusable until signed in; sign-in/sign-out works in dev and `preview`;
   identity (name/avatar) is displayed.
-- No secrets in the bundle; tokens are not in `localStorage`.
+- No secrets in the bundle; tokens are not in `localStorage`; sign-out clears tokens
+  and either clears or account-namespaces the local extraction cache.
 - Tests stay green (auth mocked / behind the seam).
 
 ---
@@ -317,29 +366,35 @@ manifest, settings) using only `drive.file`.
    single `drive.file` scope. Request the token right after sign-in (or on first
    Drive action). Handle expiry with a silent re-request; handle user denial.
 2. **Google Picker service:** add `src/services/drive/picker.ts` (loads the `gapi`
-   `picker` library; uses the API key + App ID). It provides two flows: **(a) pick
-   the library folder** (folder-select view) and **(b) pick existing `.epub`
-   file(s)** to add. Picking grants the app `drive.file` access to the selection.
+  `picker` library; uses the API key + App ID). It provides two flows: **(a) pick
+  the library folder** (folder-select view, only after the Phase 0 folder proof is
+  green) and **(b) pick existing `.epub` file(s)** to add. Picking grants the app
+  `drive.file` access to the selected folder/file records.
 3. **Folder bootstrap:** on first run, prompt (via the Picker) to choose the library
-   folder; create an `app-data/` sub-folder inside it; record the folder id in the
-   manifest and persist it locally. On later visits, recover the manifest by finding
-   the app's own `drive.file`-accessible `library.json` (or the saved folder id) —
-   no re-pick needed.
+  folder; create an `app-data/` sub-folder inside it; create `library.json` and
+  `settings.json` with app-specific `appProperties`; record `folderId`,
+  `manifestFileId`, and `settingsFileId`; persist those ids locally. On later
+  visits, use the saved file ids first; if local state is missing, recover by
+  listing only files visible through `drive.file` with the app's `appProperties`
+  marker. If recovery fails, prompt the user to pick the folder again rather than
+  broadening scopes.
 4. **Drive REST client:** add `src/services/drive/driveClient.ts` wrapping the Drive
    v3 REST API — `get`/download, `create`/`update`, and **resumable upload** for EPUB
    bytes (all `drive.file`). It does **not** enumerate arbitrary folder contents and
    has **no delete** method. Centralize `401` (re-auth), `403`/`429`
    (quota/rate-limit) and network handling with **exponential backoff + jitter** here.
 5. **Manifest + settings:** add `src/services/drive/manifest.ts` and
-   `src/services/drive/settings.ts` that read/write `app-data/library.json` and
-   `app-data/settings.json` via `drive.file`. Adding a book appends to the manifest;
-   **removing forgets it** (drops the entry); a `404` when fetching a referenced file
-   prunes its entry.
+  `src/services/drive/settings.ts` that read/write `app-data/library.json` and
+  `app-data/settings.json` via `drive.file`. Adding a book appends to the manifest
+  only after the app has a `bookId`, metadata, and Drive fingerprint; **removing
+  forgets it** (drops the entry); a `404` when fetching a referenced file prunes its
+  entry.
 6. **Data mapping in Drive:**
    - `<library folder>/*.epub` — uploaded books (human filenames). Picked books may
      live elsewhere in the user's Drive; the manifest references them by `fileId`.
-   - `app-data/library.json` — the **curated manifest**: `folderId` + (`bookId` ↔ Drive
-     `fileId` + `BookMeta`: title, author, `coverRef`, size, timestamps).
+   - `app-data/library.json` — the **curated manifest**: `folderId`, metadata file ids,
+     schema version, and (`bookId` ↔ Drive `fileId` + `BookMeta`: title, author,
+     `coverRef`, file size, timestamps, Drive fingerprint).
    - `app-data/settings.json` — theme + `perBook: { [bookId]: { location, mode, zoom } }`
      (last-write-wins by `updatedAt`).
    - **Never stored in Drive:** the derived extraction cache — kept in the local
@@ -353,12 +408,13 @@ manifest, settings) using only `drive.file`.
 **Acceptance criteria**
 
 - First run prompts a folder pick; the choice persists so it isn't asked again.
-- Picking an existing `.epub` adds it to the library; an **uploaded** book lands in
-  the library folder and is added.
+- Picking an existing `.epub` downloads it once for hashing/metadata/fingerprint and
+  then adds it to the library; an **uploaded** book lands in the library folder and is
+  added after hashing/metadata extraction.
 - **Removing** a book forgets it (drops the manifest entry) and leaves the Drive file
   intact.
 - The manifest and `settings.json` are created/updated in `app-data/`; only
-  `drive.file` is used.
+  `drive.file` is used; metadata recovery works from saved file ids or appProperties.
 
 ---
 
@@ -372,16 +428,18 @@ there is no offline library.
 **Steps**
 
 1. **Storage seam:** refactor [src/storage/library.ts](../src/storage/library.ts) and
-   [src/storage/readingState.ts](../src/storage/readingState.ts) so their public API
-   (`addBookToLibrary`, `getBookFile`, `saveReadingState`, `removeBookFromLibrary`, …)
-   is backed by the Drive manifest/settings services instead of IndexedDB. Keep the
-   same signatures where possible so pages/hooks change minimally; `saveReadingState`
-   writes into `settings.json` (`perBook`), and `removeBookFromLibrary` now **forgets**
-   the book (manifest + local cache) rather than deleting the Drive file.
+   [src/storage/readingState.ts](../src/storage/readingState.ts) so the public API is
+   backed by the Drive manifest/settings services instead of IndexedDB. Do not keep an
+   eager `getBookFile`/route-state contract if it forces an EPUB download before the
+   extraction cache is checked. Prefer identity-first APIs such as
+   `getBookMeta(bookId)`, `getAllBooks()`, `fetchBookFileForExtraction(bookId)`, and
+   `saveReadingState(bookId, partial)`. `saveReadingState` writes into
+   `settings.json` (`perBook`), and `removeBookFromLibrary` now **forgets** the book
+   (manifest + local cache) rather than deleting the Drive file.
 2. **Library index:** read `app-data/library.json` once per session into memory (the
    curated list); update it on add/remove/last-opened and write back (debounced).
-   `getBookFile` downloads the book's Drive file (by `fileId`) — only needed on an
-   extraction-cache miss; a `404` prunes the entry.
+   Download the book's Drive file (by `fileId`) only from the cache-miss/stale-cache
+   extraction path; a `404` prunes the entry.
 3. **Preferences & reading state:** theme + per-book position/mode/zoom write to
    `app-data/settings.json`, **debounced/coalesced** (e.g. on pause and at most every
    few seconds) to avoid hammering the Drive API with position updates;
@@ -392,19 +450,28 @@ there is no offline library.
    it every session would be too slow. It is **never** uploaded to Drive (too large;
    Drive-quota pressure). Trim [src/storage/db.ts](../src/storage/db.ts) to **drop**
    the now-Drive-backed `library` and `reading-state` stores while **keeping**
-   `extracted-books-raw` / `extracted-sections`. Optionally add a small byte cache
+   `extracted-books-raw` / `extracted-sections`; this requires an IndexedDB version
+   upgrade/migration, not an in-place schema edit. Optionally add a small byte cache
    (Cache Storage) so a cache miss doesn't re-download the same EPUB.
 5. **Extraction pipeline:** keep the existing _cache-then-extract_ flow in
-   [src/pages/reader/useBookExtraction.ts](../src/pages/reader/useBookExtraction.ts):
-   check the IndexedDB extraction cache first; on a **hit**, render from it (no Drive
-   download, no extraction); on a **miss**, download the book's Drive file (by
-   `fileId`), extract, then persist to the IndexedDB cache. Preserve the existing
-   visible progress.
+   [src/pages/reader/useBookExtraction.ts](../src/pages/reader/useBookExtraction.ts),
+   but make it `bookId`/manifest-driven instead of `File`-driven. The reader route and
+   page refresh must recover from the route `bookTitle`/manifest entry; navigation
+   state may improve startup but cannot be required. On open, fetch cheap Drive
+   metadata (`id`, `modifiedTime`, `size`, `md5Checksum` or ETag) and compare it with
+   the manifest fingerprint before trusting a cache hit. If the fingerprint matches,
+   check IndexedDB and render from it on a **hit** (metadata request only; no EPUB
+   download, no extraction). On a **miss** or stale fingerprint, download the EPUB
+   Drive file, compute the SHA-256 `bookId`, extract, update the manifest if the hash
+   changed, invalidate the stale cache entry, then persist the fresh extraction.
+   Preserve the existing visible progress.
 6. **Concurrency & removal:** last-write-wins by `updatedAt` / Drive `modifiedTime`
-   for the JSON files; content-hash `id`s keep books conflict-free. **Remove-from-
-   library** just drops the manifest entry + local cache (the Drive file is **never**
-   deleted); a referenced file that has vanished (`404`) is pruned the same way. No
-   offline outbox (online-only).
+   for the JSON files; content-hash `id`s keep immutable content versions
+   conflict-free. If a Drive file is replaced with different bytes, treat it as a new
+   content version and do not serve the old cache. **Remove-from-library** just drops
+   the manifest entry + local cache (the Drive file is **never** deleted); a
+   referenced file that has vanished (`404`) is pruned the same way. No offline
+   outbox (online-only).
 
 **Files touched:** [src/storage/library.ts](../src/storage/library.ts),
 [src/storage/readingState.ts](../src/storage/readingState.ts),
@@ -412,6 +479,7 @@ there is no offline library.
 extraction-cache stores), [src/storage/bookCache.ts](../src/storage/bookCache.ts)
 (kept as the local extraction cache),
 [src/pages/reader/useBookExtraction.ts](../src/pages/reader/useBookExtraction.ts),
+[src/pages/ReaderPage.tsx](../src/pages/ReaderPage.tsx), [src/router.tsx](../src/router.tsx),
 [src/pages/HomePage.tsx](../src/pages/HomePage.tsx),
 [src/pages/reader/useReaderPersistence.ts](../src/pages/reader/useReaderPersistence.ts).
 
@@ -423,8 +491,12 @@ extraction-cache stores), [src/storage/bookCache.ts](../src/storage/bookCache.ts
   device.
 - Removing a book forgets it (manifest + local cache) and leaves the Drive file
   intact.
-- Reopening a book on the same device uses the IndexedDB extraction cache (no
-  re-download, no re-extraction).
+- Reader refresh/direct hash URL works from the manifest without in-memory `File`
+  navigation state.
+- Reopening a book on the same device validates the Drive fingerprint, then uses the
+  IndexedDB extraction cache on a match (no EPUB re-download, no re-extraction).
+- Replacing the Drive file with different bytes invalidates the stale cache and
+  updates the manifest to the new content hash/fingerprint.
 - Clearing the local cache still lets every book open (re-download + re-extract).
 - No IndexedDB **library** remains (only the extraction cache); the Vitest suite is
   updated and green.
@@ -440,16 +512,18 @@ extraction-cache stores), [src/storage/bookCache.ts](../src/storage/bookCache.ts
 1. Account menu with profile + **Sign out**.
 2. **First-run folder pick:** if no library folder is saved, prompt the user (via the
    Google Picker) to choose one before showing the (empty) library.
-3. **Add books:** an **Upload** action (pick a local `.epub` → resumable upload into
-   the library folder) and an **Add from Drive** action (Google Picker → select
-   existing `.epub` file(s)).
+3. **Add books:** an **Upload** action (pick a local `.epub` → hash/extract metadata
+  → resumable upload into the library folder) and an **Add from Drive** action
+  (Google Picker → select existing `.epub` file(s) → progress-visible download for
+  hash/metadata/fingerprint). Concurrency-limit add/pre-extract work so multi-select
+  does not saturate Drive or memory.
 4. **Remove from library:** a per-book **Remove** action on
    [src/components/BookCard.tsx](../src/components/BookCard.tsx) that **forgets** the
    book (drops the manifest entry + clears its local cache). Use explicit copy —
    e.g. "Remove from library (keeps the file in your Drive)" — so users know it is
-   **not** a Drive delete.
-5. Per-book status: **in library**, **downloading**, **extracting**, **ready** —
-   reflecting the fetch/extract pipeline.
+   **not** a Drive delete and not a Google app-permission revocation.
+5. Per-book status: **in library**, **validating**, **downloading**, **extracting**,
+   **ready** — reflecting the metadata-check/fetch/extract pipeline.
 6. A global **status** indicator (loading library / saving settings / error) and a
    manual **Refresh** that reloads `library.json` + `settings.json` and prunes any
    entries whose Drive file is gone.
@@ -480,8 +554,10 @@ extraction-cache stores), [src/storage/bookCache.ts](../src/storage/bookCache.ts
 
 - **Tokens:** keep access tokens in memory (or `sessionStorage`), **never**
   `localStorage`; clear on sign-out; rely on short-lived tokens + PKCE.
-- **CSP:** keep `connect-src`/`script-src`/`frame-src` limited to Google (Identity,
-  Drive APIs, Picker) + `'self'`.
+- **CSP:** keep network/script/frame origins limited to Google (Identity, Drive APIs,
+  Picker) + `'self'`, while explicitly allowing the app's required inline Emotion
+  styles and `data:`/`blob:` reader image/font/worker assets. `frame-ancestors` must
+  be delivered in `public/_headers`; do not rely on a meta tag for it.
 - **Least privilege:** the single **`drive.file`** scope — per-file access to
   app-created or user-picked files; the app can never see the rest of the user's
   Drive. **Never** request `drive.readonly`/`drive`.
@@ -494,8 +570,9 @@ extraction-cache stores), [src/storage/bookCache.ts](../src/storage/bookCache.ts
   to files it created or the user explicitly picked — a strong privacy default worth
   stating plainly in the privacy note.
 - **Local cache hygiene:** the IndexedDB extraction cache holds derived book content
-  for performance; it is keyed by content hash and regenerable. Offer a **"clear
-  cache"** action and consider clearing it on sign-out for shared devices.
+  for performance; it is regenerable but privacy-sensitive. Clear it on sign-out by
+  default, or namespace records by Google `sub` if cache retention is deliberately
+  chosen. Always offer a **"clear cache"** action.
 - **OAuth verification:** `drive.file` is **non-sensitive**, so it needs only basic
   consent-screen verification — **no** restricted-scope security assessment (confirm
   current Google requirements).
@@ -508,9 +585,11 @@ extraction-cache stores), [src/storage/bookCache.ts](../src/storage/bookCache.ts
 
 **Acceptance criteria**
 
-- No secrets in the bundle; CSP blocks non-Google endpoints.
+- No secrets in the bundle; CSP blocks unrelated endpoints while allowing the
+  documented Google, Emotion, and reader asset requirements.
 - Scope is `drive.file` only (never `drive.readonly`/`drive`); sign-out clears
-  tokens; the local cache is clearable on demand.
+  tokens; the local cache is cleared on sign-out by default or account-namespaced and
+  clearable on demand.
 
 ---
 
@@ -564,21 +643,26 @@ This phase is the concrete, click-by-click procedure; see
 
 - Signed-out shows the sign-in gate; nothing else is reachable.
 - First run prompts a **library-folder pick** (Google Picker); the choice persists.
-- Sign-in / sign-out; identity displayed; tokens cleared on sign-out (the local
-  extraction cache may be retained).
-- **Add from Drive** (Picker) → the picked `.epub` joins the library.
+- Sign-in / sign-out; identity displayed; tokens cleared on sign-out; the local
+  extraction cache is cleared by default or account-namespaced and clearable.
+- **Add from Drive** (Picker) → the picked `.epub` is downloaded once for
+  hash/metadata/fingerprint and joins the library.
 - **Upload** a local `.epub` → it lands in the library folder and joins the library.
 - **Remove** a book → it leaves the library, but the file is **still in Drive**
   (re-add works).
 - A manifest entry whose Drive file was deleted is pruned on refresh.
 - Open a book on a second browser/profile (same account) → downloads + extracts.
+- Refresh or direct navigation to a reader hash URL opens from the manifest without
+  relying on in-memory `File` route state.
+- Replacing a Drive EPUB with different bytes invalidates the old local cache and
+  updates the manifest to the new content hash/fingerprint.
 - Theme + reading position/mode save to `settings.json` (debounced) and restore on
   another device.
 - Refresh reloads `library.json` + `settings.json`.
 - Token expiry silently re-authorizes; **quota / rate-limit / Drive-full** errors
   are surfaced with actionable text.
-- Reopening a book uses the local IndexedDB extraction cache (fast; no re-download
-  or re-extraction).
+- Reopening a book validates Drive metadata, then uses the local IndexedDB extraction
+  cache on a fingerprint match (fast; no EPUB re-download or re-extraction).
 - Clearing the local cache still lets books open (re-download + re-extract).
 - PWA still installs and app-shell caching is unaffected (no offline reading).
 
@@ -630,7 +714,8 @@ Workers has a free tier too).
    `npm run build`; output directory `dist`.
 4. **Environment variables:** add `VITE_GOOGLE_CLIENT_ID`, `VITE_GOOGLE_API_KEY`, and
    `VITE_GOOGLE_PROJECT_NUMBER` for both **Production** and **Preview**.
-5. Add `public/_headers` with the CSP (allow the Google endpoints from Phase 1).
+5. Add `public/_headers` with the CSP (allow the Google, Emotion, and reader asset
+  requirements from Phase 1).
    Commit and redeploy.
 6. Deploy; note the `*.pages.dev` URL.
 7. _(Optional)_ **Custom domain:** Pages → _Custom domains_ → add
@@ -654,9 +739,14 @@ Workers has a free tier too).
   the pure-SPA model → silent re-request; add the optional BFF (Phase 7) for
   long-lived refresh tokens so long reading sessions don't prompt re-consent.
 - **Online-only dependency.** There is no offline mode: if Google APIs are
-  unreachable the library and reader are unavailable → show a clear connectivity
-  error and retry; the local IndexedDB cache can still render a previously-opened
-  book.
+  unreachable the library, metadata validation, and opening new or stale books are
+  unavailable → show a clear connectivity error and retry. A previously validated
+  cache hit can avoid the EPUB download, but do not advertise offline reading.
+- **Drive file mutation / stale cache.** A user can replace or edit a picked Drive
+  EPUB outside the app while the old content hash remains cached locally → store a
+  Drive fingerprint in the manifest and validate it before every cache-backed open;
+  changed fingerprints force re-download, re-hash, manifest update, and stale-cache
+  invalidation.
 - **Large EPUB uploads/downloads.** Resumable upload + progress; stream downloads;
   never block reading. The derived extraction cache stays in **local IndexedDB**
   (persistent; regenerated on a miss) and is **never** uploaded to Drive.
@@ -667,17 +757,20 @@ Workers has a free tier too).
   make EPUB bytes conflict-free. No offline outbox (online-only).
 - **Cost creep.** The default path is $0 (Cloudflare Pages) — avoid databases/servers
   unless Phase 7 is explicitly chosen.
-- **CSP vs GIS/Picker.** Google Identity + the Picker need specific script/frame
-  origins (`accounts.google.com`, `apis.google.com`, `docs.google.com`) → verify the
-  CSP does not block sign-in or the Picker.
+- **CSP vs GIS/Picker/reader assets.** Google Identity + the Picker need specific
+  script/frame origins (`accounts.google.com`, `apis.google.com`, `docs.google.com`),
+  Emotion needs inline runtime styles unless the app adopts CSP nonces, and extracted
+  reader assets use `data:`/`blob:` URLs → verify sign-in, Picker, covers, fonts,
+  service worker registration, and extracted sections under the deployed CSP.
 - **Security.** Never store tokens in `localStorage`; keep to the single `drive.file`
-  scope (never `drive.readonly`/`drive`); validate the ID token; HTTPS only; offer a
-  local-cache clear (and clear it on sign-out for shared devices).
+  scope (never `drive.readonly`/`drive`); validate the ID token; HTTPS only; clear
+  the local cache on sign-out by default or namespace it by Google `sub`, and always
+  offer a manual clear-cache action.
 - **Folder-content access (verify).** Whether picking a _folder_ also grants
-  `drive.file` access to files **inside** it (and files added later) is not confirmed
-  in the docs, so the plan treats the library as a **curated manifest** (add via
-  Picker/upload). If a folder grant does cascade, an optional "scan folder" action
-  can be added later — but do not rely on it.
+  `drive.file` access to create/update/recover child metadata and files added later
+  must be proven before Phase 3. The plan treats the library as a **curated manifest**
+  (add via Picker/upload), not a folder scan. If the proof fails, revise bootstrap
+  before implementation rather than broadening scopes.
 
 ### Drive quota and rate limits (detailed)
 
@@ -712,12 +805,14 @@ treat exact numbers as subject to change and read them from the Cloud console
 - **Debounce/coalesce writes:** reading position changes constantly — write
   `settings.json` on pause and at most every few seconds, coalescing rapid
   updates into one request.
-- **Conditional fetches:** use `modifiedTime`/ETags to skip re-downloading unchanged
-  files; serve from the local cache on a hit.
+- **Conditional fetches:** before trusting an extraction-cache hit, fetch cheap Drive
+  metadata (`id`, `modifiedTime`, `size`, `md5Checksum` or ETag) and compare it with
+  the manifest fingerprint. A match can serve from the local cache without an EPUB
+  download; a mismatch invalidates the old cache and re-downloads.
 - **Reuse the local extraction cache:** an IndexedDB cache **hit** renders a book
-  with **no** Drive download and **no** re-extraction — the single biggest way to
-  cut Drive calls. Optionally cache downloaded `.epub` bytes (Cache Storage) so a
-  cache miss doesn't re-download the same file.
+  after metadata validation with **no EPUB Drive download** and **no** re-extraction
+  — the single biggest way to cut Drive calls. Optionally cache downloaded `.epub`
+  bytes (Cache Storage) so a cache miss doesn't re-download the same file.
 - **Backoff everywhere:** centralize exponential backoff **with jitter** and
   `Retry-After` handling in `driveClient.ts`; cap concurrency (a small request
   queue) so bursts (multi-book operations) don't trip the per-user limit.
@@ -737,14 +832,14 @@ treat exact numbers as subject to change and read them from the Cloud console
 - Non-Google identity providers (unless the Phase 7 backend is added).
 - Real-time collaboration or sharing between users.
 - Server-side EPUB processing.
-- Deleting the underlying Drive **file** from the web UI (the in-app **Remove** only forgets a book / relinquishes access; the file stays in the user's Drive).
+- Deleting the underlying Drive **file** from the web UI (the in-app **Remove** only forgets a book/reference; the file stays in the user's Drive).
 - Offline reading / a local-first library (removed by design — the app is online-only).
 
 ---
 
 ## Suggested execution order summary
 
-**0** Google/hosting prereqs → **1** Deploy-ready SPA (env + CSP + auth gate) →
+**0** Google/hosting prereqs + folder proof → **1** Deploy-ready SPA (env + CSP) →
 **2** Required Google sign-in → **3** Drive client + Picker + manifest →
 **4** Drive as source of truth (storage migration) → **5** Library/account UX →
 **6** Security hardening → **7** _(optional)_ BFF → **8** Deployment →
