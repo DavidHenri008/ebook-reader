@@ -7,6 +7,7 @@ const MANIFEST_APP_PROPERTIES = {
 };
 
 let cachedManifest: DriveLibraryManifest | null = null;
+let manifestMutationQueue: Promise<void> = Promise.resolve();
 
 export function createEmptyManifest(
   libraryFolderId: string,
@@ -67,8 +68,15 @@ export async function writeDriveManifest(
 export async function updateDriveManifest(
   mutate: (manifest: DriveLibraryManifest) => DriveLibraryManifest,
 ): Promise<DriveLibraryManifest> {
-  if (!cachedManifest) throw new Error("Google Drive library is not loaded.");
-  return writeDriveManifest(mutate(cloneManifest(cachedManifest)));
+  const mutation = manifestMutationQueue.then(() => {
+    if (!cachedManifest) throw new Error("Google Drive library is not loaded.");
+    return writeDriveManifest(mutate(cloneManifest(cachedManifest)));
+  });
+  manifestMutationQueue = mutation.then(
+    () => undefined,
+    () => undefined,
+  );
+  return mutation;
 }
 
 function normalizeManifest(

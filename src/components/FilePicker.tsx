@@ -1,7 +1,6 @@
 import { useRef, type ChangeEvent } from "react";
 import styled from "@emotion/styled";
 import UploadFileIcon from "@mui/icons-material/UploadFile";
-import CircularProgress from "@mui/material/CircularProgress";
 import { Button } from "./ui";
 
 //#region Styled Components
@@ -15,7 +14,7 @@ interface FilePickerProps {
   onFileSelect: (files: File[]) => void;
   /** Optional custom button text */
   label?: string;
-  /** Disables the button and shows a spinner */
+  /** Disables the button */
   disabled?: boolean;
 }
 
@@ -52,13 +51,7 @@ function FilePicker({
         type="button"
         onClick={handleClick}
         disabled={disabled}
-        startIcon={
-          disabled ? (
-            <CircularProgress size="1em" color="inherit" />
-          ) : (
-            <UploadFileIcon />
-          )
-        }
+        startIcon={<UploadFileIcon />}
       >
         {label}
       </Button>

@@ -22,7 +22,7 @@ const Toolbar = styled.div`
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  margin-bottom: 1.5rem;
+  margin-bottom: 1rem;
   width: 100%;
   padding-bottom: 2px;
 `;

@@ -69,15 +69,33 @@ const LoadingText = styled.div`
   color: var(--text);
 `;
 
+const MessageArea = styled.div`
+  min-height: 1.5rem;
+  margin-bottom: 0.5rem;
+`;
+
 const StatusText = styled.div`
-  margin-bottom: 1rem;
   color: var(--text);
+  overflow-wrap: anywhere;
 `;
 
 const ErrorText = styled.div`
-  margin-bottom: 1rem;
   color: var(--danger);
+  overflow-wrap: anywhere;
 `;
+
+function formatProgress(
+  message: string,
+  loaded: number | undefined,
+  total: number | undefined,
+): string {
+  if (loaded === undefined || loaded <= 0) return message;
+  const loadedMb = Math.round(loaded / (1024 * 1024));
+  const totalMb = Math.round((total ?? 0) / (1024 * 1024));
+  return totalMb > 0
+    ? `${message} ${Math.min(loadedMb, totalMb)} MB / ${totalMb} MB`
+    : `${message} ${loadedMb} MB`;
+}
 
 function HomePage() {
   const navigate = useNavigate();
@@ -267,15 +285,27 @@ function HomePage() {
   const handleRemoveBook = useCallback(
     async (book: BookMeta) => {
       if (
-        await confirm(
+        !(await confirm(
           `Remove "${book.title}" from your library? The EPUB file stays in your Google Drive.`,
           { confirmLabel: "Remove" },
-        )
+        ))
       ) {
+        return;
+      }
+
+      setErrorMessage(null);
+      setBooks((current) =>
+        current.filter((candidate) => candidate.id !== book.id),
+      );
+      try {
         await removeBookFromLibrary(book.id);
-        setBooks((prev) =>
-          prev.filter((candidate) => candidate.id !== book.id),
+      } catch (error) {
+        setBooks((current) =>
+          current.some((candidate) => candidate.id === book.id)
+            ? current
+            : [...current, book],
         );
+        setErrorMessage(getStorageErrorMessage(error));
       }
     },
     [confirm],
@@ -460,8 +490,10 @@ function HomePage() {
         }
       />
 
-      {progressMessage && <StatusText>{progressMessage}</StatusText>}
-      {errorMessage && <ErrorText>{errorMessage}</ErrorText>}
+      <MessageArea aria-live="polite">
+        {progressMessage && <StatusText>{progressMessage}</StatusText>}
+        {errorMessage && <ErrorText>{errorMessage}</ErrorText>}
+      </MessageArea>
       <LibraryView
         books={books}
         folders={folders}
@@ -480,15 +512,6 @@ function HomePage() {
       {dialog}
     </Container>
   );
-}
-
-function formatProgress(
-  message: string,
-  loaded: number | undefined,
-  total: number | undefined,
-): string {
-  if (!total || loaded === undefined) return message;
-  return `${message} ${Math.round((loaded / total) * 100)}%`;
 }
 
 export default HomePage;

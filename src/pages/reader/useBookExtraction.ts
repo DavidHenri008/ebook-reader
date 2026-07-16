@@ -70,13 +70,19 @@ export function useBookExtraction(
         const fetched = await fetchBookFileForExtraction(
           bookId,
           (message, loaded, total) => {
-            if (!cancelled) {
-              setProgressMessage(
-                total && total > 0 && loaded !== undefined
-                  ? `${message} ${Math.round((loaded / total) * 100)}%`
-                  : message,
-              );
+            if (cancelled) return;
+            if (loaded === undefined || loaded <= 0) {
+              setProgressMessage(message);
+              return;
             }
+
+            const downloadedMb = Math.round(loaded / (1024 * 1024));
+            const totalMb = Math.round((total ?? 0) / (1024 * 1024));
+            setProgressMessage(
+              totalMb > 0
+                ? `${message} ${Math.min(downloadedMb, totalMb)} MB / ${totalMb} MB downloaded`
+                : `${message} ${downloadedMb} MB downloaded`,
+            );
           },
         );
         if (cancelled) return;

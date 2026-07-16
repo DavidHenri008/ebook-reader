@@ -8,6 +8,7 @@ import {
 import { pickLibraryFolder } from "./picker";
 import {
   createEmptyManifest,
+  getCachedDriveManifest,
   getManifestAppProperties,
   loadDriveManifest,
   setCachedDriveManifest,
@@ -41,6 +42,10 @@ export async function ensureDriveLibrary(
   const accountSub = getActiveGoogleUserSub();
   const localState = readLocalState(accountSub);
   if (localState) {
+    const cachedManifest = getCachedDriveManifest();
+    if (cachedManifest?.manifestFileId === localState.manifestFileId) {
+      return cachedManifest;
+    }
     return loadFromState(localState);
   }
 

@@ -242,12 +242,15 @@ export async function fetchBookFileForExtraction(
 
   const metadata = await getDriveFileMetadata(book.driveFileId);
   const currentFingerprint = fingerprintFromMetadata(metadata);
-  onProgress?.(`Downloading ${book.title}...`, 0, Number(metadata.size ?? 0));
+  const metadataBytes = Number(metadata.size ?? 0);
+  const expectedBytes = metadataBytes || book.fileSize;
+  onProgress?.(`Downloading ${book.title}...`, 0, expectedBytes);
   const fileData = await downloadDriveFile(
     book.driveFileId,
     (loaded, total) => {
       onProgress?.(`Downloading ${book.title}...`, loaded, total);
     },
+    expectedBytes,
   );
   const actualBookId = await sha256Hex(fileData);
 
@@ -285,19 +288,17 @@ export async function fetchBookFileForExtraction(
     ...book,
     coverUrl:
       book.coverUrl ??
-      (
-        await extractEpubMetadata(
-          fileData,
-          metadata.name || book.filename,
-        )
-      ).coverUrl,
+      (await extractEpubMetadata(fileData, metadata.name || book.filename))
+        .coverUrl,
     filename: metadata.name || book.filename,
     fileSize: Number(metadata.size ?? fileData.byteLength),
     driveFingerprint: currentFingerprint,
   };
   if (
     !fingerprintsMatch(book.driveFingerprint, currentFingerprint) ||
-    updatedBook.coverUrl !== book.coverUrl
+    updatedBook.coverUrl !== book.coverUrl ||
+    updatedBook.filename !== book.filename ||
+    updatedBook.fileSize !== book.fileSize
   ) {
     await upsertBook(updatedBook);
   }

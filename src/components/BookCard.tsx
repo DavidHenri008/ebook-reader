@@ -10,7 +10,6 @@ import IconButton from "@mui/material/IconButton";
 import ListItemIcon from "@mui/material/ListItemIcon";
 import Menu from "@mui/material/Menu";
 import MenuItem from "@mui/material/MenuItem";
-import Tooltip from "@mui/material/Tooltip";
 import type { BookMeta } from "../types";
 
 //#region Styled Components
@@ -202,17 +201,15 @@ function BookCard({
         <Title title={book.title}>{book.title}</Title>
         {book.author && <Author title={book.author}>{book.author}</Author>}
       </OpenButton>
-      <Tooltip title={`Actions for ${book.title}`}>
-        <ActionMenuButton
-          aria-label={`Actions for ${book.title}`}
-          aria-controls={menuAnchor ? menuId : undefined}
-          aria-haspopup="true"
-          aria-expanded={menuAnchor ? "true" : undefined}
-          onClick={(event) => setMenuAnchor(event.currentTarget)}
-        >
-          <MoreVertIcon />
-        </ActionMenuButton>
-      </Tooltip>
+      <ActionMenuButton
+        aria-label={`Actions for ${book.title}`}
+        aria-controls={menuAnchor ? menuId : undefined}
+        aria-haspopup="true"
+        aria-expanded={menuAnchor ? "true" : undefined}
+        onClick={(event) => setMenuAnchor(event.currentTarget)}
+      >
+        <MoreVertIcon />
+      </ActionMenuButton>
       <Menu
         id={menuId}
         anchorEl={menuAnchor}

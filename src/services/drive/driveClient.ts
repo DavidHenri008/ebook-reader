@@ -92,6 +92,7 @@ export async function getDriveFileMetadata(
 export async function downloadDriveFile(
   fileId: string,
   onProgress?: (loaded: number, total: number) => void,
+  expectedBytes = 0,
 ): Promise<ArrayBuffer> {
   const params = new URLSearchParams({
     alt: "media",
@@ -99,10 +100,20 @@ export async function downloadDriveFile(
   });
   const response = await authorizedFetch(
     `${DRIVE_API}/files/${fileId}?${params}`,
+    expectedBytes > 0 ? undefined : { headers: { Range: "bytes=0-" } },
   );
-  const total = Number(response.headers.get("content-length") ?? 0);
+  const responseContentLength = Number(
+    response.headers.get("content-length") ?? 0,
+  );
+  const contentRange = response.headers.get("content-range");
+  const rangeTotal = getContentRangeTotal(contentRange);
+  const total = rangeTotal || responseContentLength || expectedBytes;
 
-  if (!response.body || !onProgress) return response.arrayBuffer();
+  if (!response.body || !onProgress) {
+    const fileData = await response.arrayBuffer();
+    onProgress?.(fileData.byteLength, total || fileData.byteLength);
+    return fileData;
+  }
 
   const reader = response.body.getReader();
   const chunks: Uint8Array[] = [];
@@ -124,6 +135,11 @@ export async function downloadDriveFile(
     offset += chunk.byteLength;
   }
   return bytes.buffer;
+}
+
+function getContentRangeTotal(contentRange: string | null): number {
+  const match = contentRange?.match(/\/([0-9]+)$/);
+  return match ? Number(match[1]) : 0;
 }
 
 export async function createDriveFolder(
