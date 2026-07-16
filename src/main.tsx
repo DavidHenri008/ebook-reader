@@ -1,7 +1,7 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { registerSW } from "virtual:pwa-register";
-import { GlobalStyles } from "./styles";
+import { AppThemeProvider, GlobalStyles } from "./styles";
 import App from "./App";
 import { isNative } from "./platform/platform";
 import { AuthProvider } from "./auth";
@@ -15,9 +15,11 @@ if (!isNative()) {
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <GlobalStyles />
-    <AuthProvider>
-      <App />
-    </AuthProvider>
+    <AppThemeProvider>
+      <GlobalStyles />
+      <AuthProvider>
+        <App />
+      </AuthProvider>
+    </AppThemeProvider>
   </StrictMode>,
 );

@@ -70,11 +70,7 @@ function ReaderToolbar({
 }: ReaderToolbarProps) {
   return (
     <Toolbar>
-      <MuiButton
-        startIcon={<ArrowBackIcon />}
-        onClick={onBackToLibrary}
-        sx={{ color: "var(--text)", textTransform: "none" }}
-      >
+      <MuiButton startIcon={<ArrowBackIcon />} onClick={onBackToLibrary}>
         Library
       </MuiButton>
       <BookTitle title={bookTitle}>{bookTitle}</BookTitle>
@@ -88,17 +84,6 @@ function ReaderToolbar({
             if (value) onModeChange(value);
           }}
           disabled={controlsDisabled}
-          sx={{
-            "& .MuiToggleButton-root": {
-              borderColor: "var(--border)",
-              color: "var(--text)",
-              textTransform: "none",
-              "&.Mui-selected": {
-                bgcolor: "var(--accent-bg)",
-                color: "var(--accent)",
-              },
-            },
-          }}
         >
           <ToggleButton value="scrolled">Scrolled</ToggleButton>
           <ToggleButton value="paginated">Paginated</ToggleButton>
@@ -109,7 +94,6 @@ function ReaderToolbar({
               aria-label="Zoom out"
               onClick={onZoomOut}
               disabled={controlsDisabled}
-              sx={iconButtonStyles}
             >
               <ZoomOutIcon />
             </IconButton>
@@ -122,7 +106,6 @@ function ReaderToolbar({
               aria-label="Zoom in"
               onClick={onZoomIn}
               disabled={controlsDisabled}
-              sx={iconButtonStyles}
             >
               <ZoomInIcon />
             </IconButton>
@@ -133,11 +116,7 @@ function ReaderToolbar({
             theme === "light" ? "Switch to dark mode" : "Switch to light mode"
           }
         >
-          <IconButton
-            aria-label="Toggle theme"
-            onClick={onToggleTheme}
-            sx={iconButtonStyles}
-          >
+          <IconButton aria-label="Toggle theme" onClick={onToggleTheme}>
             {theme === "light" ? <DarkModeIcon /> : <LightModeIcon />}
           </IconButton>
         </Tooltip>
@@ -145,10 +124,5 @@ function ReaderToolbar({
     </Toolbar>
   );
 }
-
-const iconButtonStyles = {
-  color: "var(--text)",
-  "&:hover": { bgcolor: "var(--accent-bg)", color: "var(--accent)" },
-};
 
 export default ReaderToolbar;

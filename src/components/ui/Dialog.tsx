@@ -44,10 +44,9 @@ function Dialog({ state, onConfirm, onCancel }: DialogProps) {
           sx: {
             width: "100%",
             maxWidth: "24rem",
-            border: "1px solid var(--border)",
+            border: 1,
+            borderColor: "divider",
             borderRadius: 2,
-            bgcolor: "var(--bg)",
-            color: "var(--text)",
           },
         },
         backdrop: { sx: { bgcolor: "var(--overlay)" } },
@@ -60,9 +59,7 @@ function Dialog({ state, onConfirm, onCancel }: DialogProps) {
         }}
       >
         <DialogContent>
-          <DialogContentText
-            sx={{ mb: hasInput ? 2.5 : 0, color: "var(--text-heading)" }}
-          >
+          <DialogContentText sx={{ mb: hasInput ? 2.5 : 0 }}>
             {state.message}
           </DialogContentText>
           {state.kind === "prompt" && (
@@ -72,7 +69,6 @@ function Dialog({ state, onConfirm, onCancel }: DialogProps) {
               label={state.inputLabel ?? state.message}
               value={inputValue}
               onChange={(event) => setInputValue(event.target.value)}
-              sx={fieldStyles}
             />
           )}
           {state.kind === "select" && (
@@ -83,7 +79,6 @@ function Dialog({ state, onConfirm, onCancel }: DialogProps) {
               label={state.inputLabel ?? state.message}
               value={inputValue}
               onChange={(event) => setInputValue(event.target.value)}
-              sx={fieldStyles}
             >
               {state.options?.map((option) => (
                 <MenuItem key={option.value} value={option.value}>
@@ -95,20 +90,16 @@ function Dialog({ state, onConfirm, onCancel }: DialogProps) {
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2.5 }}>
           {state.kind !== "alert" && (
-            <MuiButton onClick={onCancel} sx={buttonStyles}>
-              {state.cancelLabel}
-            </MuiButton>
+            <MuiButton onClick={onCancel}>{state.cancelLabel}</MuiButton>
           )}
           <MuiButton
             autoFocus={!hasInput}
             type={hasInput ? "submit" : "button"}
             variant="contained"
-            disableElevation
             onClick={() => {
               if (!hasInput) onConfirm();
             }}
             disabled={state.kind === "prompt" && !inputValue.trim()}
-            sx={buttonStyles}
           >
             {state.confirmLabel}
           </MuiButton>
@@ -117,29 +108,5 @@ function Dialog({ state, onConfirm, onCancel }: DialogProps) {
     </MuiDialog>
   );
 }
-
-const buttonStyles = {
-  color: "var(--accent)",
-  textTransform: "none",
-  "&.MuiButton-contained": {
-    bgcolor: "var(--accent-bg)",
-    "&:hover": { bgcolor: "var(--accent-bg)" },
-  },
-  "&.Mui-disabled": {
-    bgcolor: "var(--accent-bg)",
-    color: "var(--text)",
-    opacity: 0.55,
-  },
-};
-
-const fieldStyles = {
-  "& .MuiInputLabel-root": { color: "var(--text)" },
-  "& .MuiOutlinedInput-root": {
-    color: "var(--text)",
-    "& fieldset": { borderColor: "var(--border)" },
-    "&:hover fieldset": { borderColor: "var(--accent-border)" },
-    "&.Mui-focused fieldset": { borderColor: "var(--accent)" },
-  },
-};
 
 export default Dialog;

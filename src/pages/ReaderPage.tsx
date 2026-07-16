@@ -2,11 +2,7 @@ import { useEffect, useCallback, useMemo, useState } from "react";
 import { useLocation, useNavigate, useParams } from "@tanstack/react-router";
 import styled from "@emotion/styled";
 import { SectionViewer, ReaderToolbar, ReaderSidebar } from "../components";
-import {
-  loadReadingState,
-  updateLastOpened,
-  getCurrentLibraryTheme,
-} from "../storage";
+import { loadReadingState, updateLastOpened } from "../storage";
 import { sectionIndexForHref } from "../services/bookExtractor";
 import {
   clampSectionIndex,
@@ -64,7 +60,6 @@ const ProgressBody = styled.div`
 interface LocationState {
   bookId?: string;
   bookTitle?: string;
-  theme?: Theme;
 }
 
 const ZOOM_STEP = 10;
@@ -161,17 +156,13 @@ function ReaderPage() {
   const locationState = location.state as LocationState | undefined;
 
   const bookId = locationState?.bookId ?? routeBookId ?? null;
-  const libraryTheme = useMemo(
-    () => locationState?.theme ?? getCurrentLibraryTheme(),
-    [locationState?.theme],
-  );
   const [readingState, setReadingState] = useState<ReadingState | null>(null);
 
   const [currentSection, setCurrentSection] = useState(0);
   const [anchor, setAnchor] = useState(0);
   const [zoom, setZoom] = useState(100);
   const [mode, setMode] = useState<ReadingMode>("scrolled");
-  const { theme, toggleTheme } = useReaderTheme(libraryTheme);
+  const { theme, toggleTheme } = useReaderTheme();
   const [viewerViewport, setViewerViewport] = useState<PageViewport | null>(
     null,
   );

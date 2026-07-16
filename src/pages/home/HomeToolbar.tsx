@@ -32,12 +32,6 @@ const LibraryActions = styled.div`
   width: 100%;
 `;
 
-const SettingsMenuIcon = styled(ListItemIcon)`
-  && {
-    color: inherit;
-  }
-`;
-
 interface HomeToolbarProps {
   isAdding: boolean;
   isRefreshing: boolean;
@@ -134,9 +128,8 @@ function HomeToolbar({
               sx: {
                 mt: 1,
                 minWidth: "14rem",
-                border: "1px solid var(--border)",
-                bgcolor: "var(--bg)",
-                color: "var(--text)",
+                border: 1,
+                borderColor: "divider",
               },
             },
           }}
@@ -148,9 +141,9 @@ function HomeToolbar({
             }}
             disabled={isRefreshing}
           >
-            <SettingsMenuIcon>
+            <ListItemIcon>
               <DriveFolderUploadIcon />
-            </SettingsMenuIcon>
+            </ListItemIcon>
             Change Google Drive folder
           </MenuItem>
           <MenuItem
@@ -160,9 +153,9 @@ function HomeToolbar({
             }}
             disabled={isClearingCache}
           >
-            <SettingsMenuIcon>
+            <ListItemIcon>
               <DeleteSweepIcon />
-            </SettingsMenuIcon>
+            </ListItemIcon>
             {isClearingCache ? "Clearing..." : "Clear cached books"}
           </MenuItem>
           <MenuItem
@@ -171,9 +164,9 @@ function HomeToolbar({
               onToggleTheme();
             }}
           >
-            <SettingsMenuIcon>
+            <ListItemIcon>
               {theme === "light" ? <DarkModeIcon /> : <LightModeIcon />}
-            </SettingsMenuIcon>
+            </ListItemIcon>
             {theme === "light"
               ? "Switch to dark theme"
               : "Switch to light theme"}

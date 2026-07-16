@@ -8,7 +8,7 @@ import type { Theme } from "../types";
  * --text-heading/--border` values from the same source (a shadow root cannot
  * inherit page-level CSS variables, so it must restate the literals).
  */
-interface ThemePalette {
+export interface ThemePalette {
   bg: string;
   text: string;
   textHeading: string;
@@ -38,6 +38,10 @@ const palettes: Record<Theme, ThemePalette> = {
     accentBorder: "rgba(192, 132, 252, 0.5)",
   },
 };
+
+export function getThemePalette(theme: Theme): ThemePalette {
+  return palettes[theme];
+}
 
 /**
  * Returns the full set of theme CSS-variable declarations for a `:root` /

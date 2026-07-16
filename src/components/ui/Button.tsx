@@ -18,22 +18,8 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
     <MuiButton
       ref={ref}
       variant={$variant === "filled" ? "contained" : "outlined"}
-      disableElevation
       sx={{
-        minHeight: "2.5rem",
-        borderRadius: 1,
-        borderColor: "var(--border)",
-        bgcolor: $variant === "filled" ? "var(--accent-bg)" : "var(--bg)",
-        color: $variant === "filled" ? "var(--accent)" : "var(--text)",
         fontSize: "1rem",
-        fontWeight: 500,
-        textTransform: "none",
-        border: "1px solid var(--border)",
-        "&:hover": {
-          borderColor: "var(--accent-border)",
-          color: "var(--accent)",
-          border: "1px solid currentColor",
-        },
         ...sx,
       }}
       {...props}
@@ -49,15 +35,9 @@ const IconButton = forwardRef<HTMLButtonElement, MuiIconButtonProps>(
         sx={{
           width: "2.5rem",
           height: "2.5rem",
-          border: "1px solid var(--border)",
+          border: 1,
+          borderColor: "divider",
           borderRadius: 1,
-          bgcolor: "var(--bg)",
-          color: "var(--text)",
-          "&:hover": {
-            borderColor: "var(--accent-border)",
-            color: "var(--accent)",
-            border: "1px solid currentColor",
-          },
           ...sx,
         }}
         {...props}
