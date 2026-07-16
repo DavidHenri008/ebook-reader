@@ -38,6 +38,7 @@ export interface DriveFileFingerprint {
 export interface VirtualFolder {
   id: string;
   name: string;
+  parentId?: string;
   sortOrder: number;
   createdAt: number;
   updatedAt: number;

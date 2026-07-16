@@ -77,13 +77,21 @@ export async function getBookMeta(id: string): Promise<BookMeta | undefined> {
 export async function addBookToLibrary(
   file: File,
   onProgress?: BookProgress,
+  virtualFolderId?: string,
 ): Promise<BookMeta> {
   const manifest = await ensureDriveLibrary({ promptIfMissing: true });
   onProgress?.(`Hashing ${file.name}...`);
   const fileData = await file.arrayBuffer();
   const id = await sha256Hex(fileData);
   const existing = manifest.books.find((book) => book.id === id);
-  if (existing) return existing;
+  if (existing) {
+    if (existing.virtualFolderId !== virtualFolderId) {
+      const moved = { ...existing, virtualFolderId };
+      await upsertBook(moved);
+      return moved;
+    }
+    return existing;
+  }
 
   onProgress?.(`Reading metadata for ${file.name}...`);
   const metadata = await extractEpubMetadata(fileData, file.name);
@@ -108,6 +116,7 @@ export async function addBookToLibrary(
     lastOpenedAt: now,
     driveFileId: uploaded.id,
     driveFingerprint: fingerprintFromMetadata(uploaded),
+    virtualFolderId,
   };
 
   await upsertBook(book);
@@ -116,19 +125,21 @@ export async function addBookToLibrary(
 
 export async function addBooksFromDrivePicker(
   onProgress?: BookProgress,
+  virtualFolderId?: string,
 ): Promise<BookMeta[]> {
   await ensureDriveLibrary({ promptIfMissing: true });
   const items = await pickEpubFiles();
-  return addPickedDriveBooks(items, onProgress);
+  return addPickedDriveBooks(items, onProgress, virtualFolderId);
 }
 
 export async function addPickedDriveBooks(
   items: PickedDriveItem[],
   onProgress?: BookProgress,
+  virtualFolderId?: string,
 ): Promise<BookMeta[]> {
   const results: BookMeta[] = [];
   for (const item of items) {
-    results.push(await addPickedDriveBook(item, onProgress));
+    results.push(await addPickedDriveBook(item, onProgress, virtualFolderId));
   }
   return results;
 }
@@ -136,6 +147,7 @@ export async function addPickedDriveBooks(
 export async function addPickedDriveBook(
   item: PickedDriveItem,
   onProgress?: BookProgress,
+  virtualFolderId?: string,
 ): Promise<BookMeta> {
   const manifest = await ensureDriveLibrary({ promptIfMissing: true });
   onProgress?.(`Reading Google Drive metadata for ${item.name}...`);
@@ -150,7 +162,14 @@ export async function addPickedDriveBook(
   });
   const id = await sha256Hex(fileData);
   const existing = manifest.books.find((book) => book.id === id);
-  if (existing) return existing;
+  if (existing) {
+    if (existing.virtualFolderId !== virtualFolderId) {
+      const moved = { ...existing, virtualFolderId };
+      await upsertBook(moved);
+      return moved;
+    }
+    return existing;
+  }
 
   onProgress?.(`Reading metadata for ${item.name}...`);
   const metadata = await extractEpubMetadata(fileData, item.name);
@@ -166,6 +185,7 @@ export async function addPickedDriveBook(
     lastOpenedAt: now,
     driveFileId: item.id,
     driveFingerprint: fingerprintFromMetadata(driveMetadata),
+    virtualFolderId,
   };
 
   await upsertBook(book);
@@ -278,12 +298,14 @@ export async function removeBookFromLibrary(id: string): Promise<void> {
 
 export async function createLibraryFolder(
   name: string,
+  parentId?: string,
 ): Promise<VirtualFolder> {
   await ensureDriveLibrary({ promptIfMissing: false });
   const now = Date.now();
   const folder: VirtualFolder = {
     id: crypto.randomUUID(),
     name: name.trim(),
+    parentId,
     sortOrder: now,
     createdAt: now,
     updatedAt: now,
@@ -313,17 +335,27 @@ export async function renameLibraryFolder(
 }
 
 export async function deleteLibraryFolder(folderId: string): Promise<void> {
-  await updateDriveManifest((manifest) => ({
-    ...manifest,
-    virtualFolders: manifest.virtualFolders.filter(
-      (folder) => folder.id !== folderId,
-    ),
-    books: manifest.books.map((book) =>
-      book.virtualFolderId === folderId
-        ? { ...book, virtualFolderId: undefined }
-        : book,
-    ),
-  }));
+  await updateDriveManifest((manifest) => {
+    const deletedFolder = manifest.virtualFolders.find(
+      (folder) => folder.id === folderId,
+    );
+    if (!deletedFolder) return manifest;
+    return {
+      ...manifest,
+      virtualFolders: manifest.virtualFolders
+        .filter((folder) => folder.id !== folderId)
+        .map((folder) =>
+          folder.parentId === folderId
+            ? { ...folder, parentId: deletedFolder.parentId }
+            : folder,
+        ),
+      books: manifest.books.map((book) =>
+        book.virtualFolderId === folderId
+          ? { ...book, virtualFolderId: deletedFolder.parentId }
+          : book,
+      ),
+    };
+  });
 }
 
 export async function reorderLibraryFolder(
@@ -331,9 +363,13 @@ export async function reorderLibraryFolder(
   direction: "up" | "down",
 ): Promise<void> {
   await updateDriveManifest((manifest) => {
-    const folders = [...manifest.virtualFolders].sort(
-      (a, b) => a.sortOrder - b.sortOrder,
+    const target = manifest.virtualFolders.find(
+      (folder) => folder.id === folderId,
     );
+    if (!target) return manifest;
+    const folders = manifest.virtualFolders
+      .filter((folder) => folder.parentId === target.parentId)
+      .sort((a, b) => a.sortOrder - b.sortOrder);
     const index = folders.findIndex((folder) => folder.id === folderId);
     const swapIndex = direction === "up" ? index - 1 : index + 1;
     if (index < 0 || swapIndex < 0 || swapIndex >= folders.length)
@@ -344,7 +380,17 @@ export async function reorderLibraryFolder(
       sortOrder: folders[swapIndex].sortOrder,
     };
     folders[swapIndex] = { ...folders[swapIndex], sortOrder: currentOrder };
-    return { ...manifest, virtualFolders: folders };
+    const orderById = new Map(
+      folders.map((folder) => [folder.id, folder.sortOrder]),
+    );
+    return {
+      ...manifest,
+      virtualFolders: manifest.virtualFolders.map((folder) =>
+        orderById.has(folder.id)
+          ? { ...folder, sortOrder: orderById.get(folder.id)! }
+          : folder,
+      ),
+    };
   });
 }
 

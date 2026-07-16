@@ -1,14 +1,22 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import styled from "@emotion/styled";
 import Button from "./Button";
 
-export type DialogKind = "confirm" | "alert";
+export type DialogKind = "confirm" | "alert" | "prompt" | "select";
+
+export interface DialogOption {
+  label: string;
+  value: string;
+}
 
 export interface DialogState {
   message: string;
   kind: DialogKind;
   confirmLabel: string;
   cancelLabel: string;
+  defaultValue?: string;
+  inputLabel?: string;
+  options?: DialogOption[];
 }
 
 //#region Styled components
@@ -41,6 +49,40 @@ const Message = styled.p`
   line-height: 1.5;
 `;
 
+const Input = styled.input`
+  width: 100%;
+  height: 2.5rem;
+  margin: -0.5rem 0 1.25rem;
+  padding: 0 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+
+  &:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+`;
+
+const Select = styled.select`
+  width: 100%;
+  min-height: 2.5rem;
+  margin: -0.5rem 0 1.25rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+
+  &:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+`;
+
 const Actions = styled.div`
   display: flex;
   justify-content: flex-end;
@@ -50,7 +92,7 @@ const Actions = styled.div`
 
 interface DialogProps {
   state: DialogState;
-  onConfirm: () => void;
+  onConfirm: (value?: string) => void;
   onCancel: () => void;
 }
 
@@ -60,10 +102,13 @@ interface DialogProps {
  */
 function Dialog({ state, onConfirm, onCancel }: DialogProps) {
   const confirmRef = useRef<HTMLButtonElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [inputValue, setInputValue] = useState(state.defaultValue ?? "");
 
   useEffect(() => {
-    confirmRef.current?.focus();
-  }, []);
+    if (state.kind === "prompt") inputRef.current?.focus();
+    else confirmRef.current?.focus();
+  }, [state.kind]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -82,19 +127,57 @@ function Dialog({ state, onConfirm, onCancel }: DialogProps) {
         if (event.target === event.currentTarget) onCancel();
       }}
     >
-      <Box role="alertdialog" aria-modal="true" aria-label={state.message}>
+      <Box
+        as="form"
+        role="alertdialog"
+        aria-modal="true"
+        aria-label={state.message}
+        onSubmit={(event) => {
+          event.preventDefault();
+          onConfirm(inputValue);
+        }}
+      >
         <Message>{state.message}</Message>
+        {state.kind === "prompt" && (
+          <Input
+            ref={inputRef}
+            aria-label={state.inputLabel ?? state.message}
+            value={inputValue}
+            onChange={(event) => setInputValue(event.target.value)}
+          />
+        )}
+        {state.kind === "select" && (
+          <Select
+            aria-label={state.inputLabel ?? state.message}
+            value={inputValue}
+            onChange={(event) => setInputValue(event.target.value)}
+          >
+            {state.options?.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </Select>
+        )}
         <Actions>
-          {state.kind === "confirm" && (
+          {state.kind !== "alert" && (
             <Button type="button" onClick={onCancel}>
               {state.cancelLabel}
             </Button>
           )}
           <Button
             ref={confirmRef}
-            type="button"
+            type={
+              state.kind === "prompt" || state.kind === "select"
+                ? "submit"
+                : "button"
+            }
             $variant="filled"
-            onClick={onConfirm}
+            onClick={() => {
+              if (state.kind !== "prompt" && state.kind !== "select")
+                onConfirm();
+            }}
+            disabled={state.kind === "prompt" && !inputValue.trim()}
           >
             {state.confirmLabel}
           </Button>

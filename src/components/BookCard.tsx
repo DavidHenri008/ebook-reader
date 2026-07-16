@@ -1,6 +1,6 @@
 import styled from "@emotion/styled";
 import { keyframes } from "@emotion/react";
-import type { BookMeta, VirtualFolder } from "../types";
+import type { BookMeta } from "../types";
 
 //#region Styled Components
 const Card = styled.div`
@@ -91,18 +91,6 @@ const Author = styled.div`
   white-space: nowrap;
 `;
 
-const FolderSelect = styled.select`
-  width: 100%;
-  margin-top: 0.5rem;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  background: var(--bg);
-  color: var(--text);
-  font: inherit;
-  font-size: 0.75rem;
-  padding: 0.25rem;
-`;
-
 const ActionOverlay = styled.div`
   position: absolute;
   top: 0;
@@ -153,6 +141,14 @@ const ClearCacheButton = styled(ActionButton)`
   }
 `;
 
+const MoveButton = styled(ActionButton)`
+  top: 36px;
+
+  &:hover {
+    background-color: var(--info);
+  }
+`;
+
 const spin = keyframes`
   to {
     transform: rotate(360deg);
@@ -191,10 +187,8 @@ interface BookCardProps {
   onRemove: (book: BookMeta) => void;
   /** Called when clear-cache button is clicked */
   onClearCache: (book: BookMeta) => void;
-  /** Optional app-only virtual folders */
-  folders?: VirtualFolder[];
-  /** Called when the app-only folder assignment changes */
-  onMove?: (book: BookMeta, folderId: string | undefined) => void;
+  /** Called when the user requests a different library path */
+  onMove?: (book: BookMeta) => void;
   /** Whether the book is currently being extracted into the cache */
   isExtracting?: boolean;
   /** Current Drive/cache pipeline status */
@@ -210,7 +204,6 @@ function BookCard({
   onClick,
   onRemove,
   onClearCache,
-  folders = [],
   onMove,
   isExtracting = false,
   status,
@@ -223,10 +216,6 @@ function BookCard({
   const handleClearCache = (e: React.MouseEvent) => {
     e.stopPropagation();
     onClearCache(book);
-  };
-
-  const handleFolderChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    onMove?.(book, e.target.value || undefined);
   };
 
   return (
@@ -255,20 +244,6 @@ function BookCard({
         <Title title={book.title}>{book.title}</Title>
         {book.author && <Author title={book.author}>{book.author}</Author>}
       </OpenButton>
-      {onMove && (
-        <FolderSelect
-          aria-label={`App folder for ${book.title}`}
-          value={book.virtualFolderId ?? ""}
-          onChange={handleFolderChange}
-        >
-          <option value="">Library root</option>
-          {folders.map((folder) => (
-            <option key={folder.id} value={folder.id}>
-              {folder.name}
-            </option>
-          ))}
-        </FolderSelect>
-      )}
       <ActionOverlay>
         <RemoveButton
           type="button"
@@ -279,6 +254,17 @@ function BookCard({
         >
           X
         </RemoveButton>
+        {onMove && (
+          <MoveButton
+            type="button"
+            className="action-btn"
+            onClick={() => onMove(book)}
+            aria-label={`Move ${book.title} to another folder`}
+            title="Move to folder"
+          >
+            ↪
+          </MoveButton>
+        )}
         <ClearCacheButton
           type="button"
           className="action-btn"

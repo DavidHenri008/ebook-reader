@@ -183,9 +183,9 @@ export async function updateDriveJsonFile<T>(
   const response = await authorizedFetch(
     `${DRIVE_UPLOAD_API}/files/${fileId}?${params}`,
     {
-    method: "PATCH",
-    headers: { "Content-Type": `multipart/related; boundary=${boundary}` },
-    body: multipartBody,
+      method: "PATCH",
+      headers: { "Content-Type": `multipart/related; boundary=${boundary}` },
+      body: multipartBody,
     },
   );
   return response.json() as Promise<DriveJsonFileMetadata>;

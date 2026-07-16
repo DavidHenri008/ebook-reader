@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import styled from "@emotion/styled";
 import { useNavigate } from "@tanstack/react-router";
 import { BookCard, FilePicker, Button, IconButton } from "../components";
@@ -19,7 +19,6 @@ import {
   refreshLibrary,
   removeBookFromLibrary,
   renameLibraryFolder,
-  reorderLibraryFolder,
   saveLibraryTheme,
   setBookVirtualFolder,
 } from "../storage";
@@ -45,6 +44,11 @@ const Header = styled.header`
   margin-bottom: 2rem;
 `;
 
+const TitleContainer = styled.div`
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+`;
 const Title = styled.h1`
   margin: 0;
   font-size: 2rem;
@@ -63,6 +67,83 @@ const HeaderActions = styled.div`
   justify-content: flex-end;
   flex-wrap: wrap;
   gap: 0.75rem;
+`;
+
+const LibraryActions = styled(HeaderActions)`
+  width: 100%;
+  justify-content: flex-start;
+`;
+
+const SettingsMenu = styled.details`
+  position: relative;
+  margin-left: auto;
+`;
+
+const SettingsSummary = styled.summary`
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background-color: var(--bg);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 1.25rem;
+  list-style: none;
+
+  &::-webkit-details-marker {
+    display: none;
+  }
+
+  &:hover {
+    border-color: var(--accent-border);
+    color: var(--accent);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+`;
+
+const SettingsPanel = styled.div`
+  position: absolute;
+  z-index: 10;
+  top: calc(100% + 0.5rem);
+  right: 0;
+  display: grid;
+  min-width: 14rem;
+  padding: 0.35rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  box-shadow: 0 0.5rem 1.5rem rgb(0 0 0 / 18%);
+`;
+
+const SettingsItem = styled.button`
+  width: 100%;
+  padding: 0.65rem 0.75rem;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+
+  &:hover:not(:disabled),
+  &:focus-visible {
+    background: var(--accent-bg);
+    color: var(--accent);
+    outline: none;
+  }
+
+  &:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
 `;
 
 const Account = styled.div`
@@ -101,38 +182,151 @@ const Toolbar = styled.div`
   margin-bottom: 1.5rem;
 `;
 
-const FolderBar = styled.div`
+const FolderNavigation = styled.nav`
+  display: grid;
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+`;
+
+const Breadcrumb = styled.div`
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  flex-wrap: wrap;
-`;
-
-const FolderButton = styled.button<{ $active?: boolean }>`
-  border: 1px solid
-    ${(props) => (props.$active ? "var(--accent-border)" : "var(--border)")};
-  border-radius: 4px;
-  background: ${(props) => (props.$active ? "var(--accent-bg)" : "var(--bg)")};
-  color: ${(props) => (props.$active ? "var(--accent)" : "var(--text)")};
-  padding: 0.4rem 0.65rem;
-  cursor: pointer;
-`;
-
-const FolderTools = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  flex-wrap: wrap;
-`;
-
-const TextInput = styled.input`
-  height: 2.5rem;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  background: var(--bg);
+  gap: 0.4rem;
+  min-width: 0;
   color: var(--text);
-  padding: 0 0.75rem;
+`;
+
+const BreadcrumbButton = styled.button<{ $current?: boolean }>`
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: ${(props) =>
+    props.$current ? "var(--text-heading)" : "var(--accent)"};
+  cursor: ${(props) => (props.$current ? "default" : "pointer")};
   font: inherit;
+  font-weight: ${(props) => (props.$current ? 600 : 400)};
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+
+  &:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+`;
+
+const FolderCard = styled.div`
+  position: relative;
+  width: 140px;
+
+  &:hover .folder-action,
+  &:focus-within .folder-action {
+    opacity: 1;
+  }
+`;
+
+const FolderOpenButton = styled.button`
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  transition: transform 0.2s;
+
+  &:hover {
+    transform: translateY(-4px);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+`;
+
+const FolderCover = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 140px;
+  height: 200px;
+  border: 1px solid var(--accent-border);
+  border-radius: 4px;
+  background: var(--accent-bg);
+  box-shadow: 0 2px 8px rgb(0 0 0 / 15%);
+`;
+
+const FolderShape = styled.div`
+  position: relative;
+  width: 82px;
+  height: 58px;
+  border-radius: 4px;
+  background: var(--accent);
+
+  &::before {
+    position: absolute;
+    top: -12px;
+    left: 0;
+    width: 36px;
+    height: 16px;
+    border-radius: 4px 4px 0 0;
+    background: var(--accent);
+    content: "";
+  }
+`;
+
+const FolderTitle = styled.div`
+  width: 100%;
+  margin-top: 0.5rem;
+  overflow: hidden;
+  color: var(--text-heading);
+  font-size: 0.875rem;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+`;
+
+const FolderAction = styled.button`
+  position: absolute;
+  right: 4px;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--overlay-strong);
+  color: white;
+  cursor: pointer;
+  font-size: 14px;
+  opacity: 0;
+  transition: opacity 0.2s;
+
+  &:focus-visible {
+    opacity: 1;
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+`;
+
+const RenameFolderButton = styled(FolderAction)`
+  top: 4px;
+
+  &:hover {
+    background: var(--info);
+  }
+`;
+
+const DeleteFolderButton = styled(FolderAction)`
+  top: 36px;
+
+  &:hover {
+    background: var(--danger);
+  }
 `;
 
 const LibraryGrid = styled.div`
@@ -180,10 +374,9 @@ const ErrorText = styled.div`
   color: var(--danger);
 `;
 
-type ActiveFolder = "all" | "root" | string;
-
 function HomePage() {
   const navigate = useNavigate();
+  const settingsMenuRef = useRef<HTMLDetailsElement>(null);
   const { user, signOut } = useAuth();
   const [books, setBooks] = useState<BookMeta[]>([]);
   const [folders, setFolders] = useState<VirtualFolder[]>([]);
@@ -195,10 +388,24 @@ function HomePage() {
   const [isClearingCache, setIsClearingCache] = useState(false);
   const [progressMessage, setProgressMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [newFolderName, setNewFolderName] = useState("");
-  const [activeFolder, setActiveFolder] = useState<ActiveFolder>("all");
+  const [activeFolder, setActiveFolder] = useState<string | undefined>();
   const [theme, setTheme] = useAppTheme();
-  const { confirm, alert, dialog } = useDialogs();
+  const { confirm, alert, prompt, select, dialog } = useDialogs();
+
+  const closeSettingsMenu = useCallback(() => {
+    if (settingsMenuRef.current) settingsMenuRef.current.open = false;
+  }, []);
+
+  useEffect(() => {
+    const handlePointerDown = (event: PointerEvent) => {
+      const menu = settingsMenuRef.current;
+      if (menu?.open && !menu.contains(event.target as Node)) {
+        menu.open = false;
+      }
+    };
+    document.addEventListener("pointerdown", handlePointerDown);
+    return () => document.removeEventListener("pointerdown", handlePointerDown);
+  }, []);
 
   const applySnapshot = useCallback((snapshot: LibrarySnapshot) => {
     setBooks(snapshot.books);
@@ -206,10 +413,9 @@ function HomePage() {
     setLibraryInfo(snapshot.info);
     setNeedsFolder(false);
     setActiveFolder((current) =>
-      current !== "all" &&
-      current !== "root" &&
+      current &&
       !snapshot.virtualFolders.some((folder) => folder.id === current)
-        ? "all"
+        ? undefined
         : current,
     );
   }, []);
@@ -238,12 +444,28 @@ function HomePage() {
   }, [loadLibrary]);
 
   const visibleBooks = useMemo(() => {
-    if (activeFolder === "all") return books;
-    if (activeFolder === "root") {
-      return books.filter((book) => !book.virtualFolderId);
-    }
     return books.filter((book) => book.virtualFolderId === activeFolder);
   }, [activeFolder, books]);
+
+  const childFolders = useMemo(
+    () => folders.filter((folder) => folder.parentId === activeFolder),
+    [activeFolder, folders],
+  );
+
+  const folderPath = useMemo(() => {
+    const byId = new Map(folders.map((folder) => [folder.id, folder]));
+    const path: VirtualFolder[] = [];
+    const visited = new Set<string>();
+    let currentId = activeFolder;
+    while (currentId && !visited.has(currentId)) {
+      visited.add(currentId);
+      const folder = byId.get(currentId);
+      if (!folder) break;
+      path.unshift(folder);
+      currentId = folder.parentId;
+    }
+    return path;
+  }, [activeFolder, folders]);
 
   const toggleTheme = useCallback(() => {
     const nextTheme = theme === "light" ? "dark" : "light";
@@ -296,9 +518,13 @@ function HomePage() {
       setErrorMessage(null);
       try {
         for (const file of files) {
-          await addBookToLibrary(file, (message, loaded, total) => {
-            setProgressMessage(formatProgress(message, loaded, total));
-          });
+          await addBookToLibrary(
+            file,
+            (message, loaded, total) => {
+              setProgressMessage(formatProgress(message, loaded, total));
+            },
+            activeFolder,
+          );
         }
         applySnapshot(await getLibrarySnapshot());
       } catch (error) {
@@ -308,7 +534,7 @@ function HomePage() {
         setIsAdding(false);
       }
     },
-    [applySnapshot],
+    [activeFolder, applySnapshot],
   );
 
   const handleAddFromDrive = useCallback(async () => {
@@ -317,7 +543,7 @@ function HomePage() {
     try {
       await addBooksFromDrivePicker((message, loaded, total) => {
         setProgressMessage(formatProgress(message, loaded, total));
-      });
+      }, activeFolder);
       applySnapshot(await getLibrarySnapshot());
     } catch (error) {
       setErrorMessage(getStorageErrorMessage(error));
@@ -325,7 +551,7 @@ function HomePage() {
       setProgressMessage(null);
       setIsAdding(false);
     }
-  }, [applySnapshot]);
+  }, [activeFolder, applySnapshot]);
 
   const handleBookClick = useCallback(
     (book: BookMeta) => {
@@ -388,18 +614,26 @@ function HomePage() {
   }, [confirm, alert]);
 
   const handleCreateFolder = useCallback(async () => {
+    const name = await prompt("New folder name", {
+      confirmLabel: "Create folder",
+      inputLabel: "Folder name",
+    });
+    if (name === null) return;
     try {
-      await createLibraryFolder(newFolderName);
-      setNewFolderName("");
+      await createLibraryFolder(name, activeFolder);
       applySnapshot(await getLibrarySnapshot());
     } catch (error) {
       setErrorMessage(getStorageErrorMessage(error));
     }
-  }, [applySnapshot, newFolderName]);
+  }, [activeFolder, applySnapshot, prompt]);
 
   const handleRenameFolder = useCallback(
     async (folder: VirtualFolder) => {
-      const nextName = window.prompt("Rename app folder", folder.name);
+      const nextName = await prompt("Rename folder", {
+        confirmLabel: "Rename",
+        defaultValue: folder.name,
+        inputLabel: "Folder name",
+      });
       if (nextName === null || nextName.trim() === folder.name) return;
       try {
         await renameLibraryFolder(folder.id, nextName);
@@ -408,7 +642,7 @@ function HomePage() {
         setErrorMessage(getStorageErrorMessage(error));
       }
     },
-    [applySnapshot],
+    [applySnapshot, prompt],
   );
 
   const handleDeleteFolder = useCallback(
@@ -431,35 +665,40 @@ function HomePage() {
     [applySnapshot, confirm],
   );
 
-  const handleReorderFolder = useCallback(
-    async (folderId: string, direction: "up" | "down") => {
-      try {
-        await reorderLibraryFolder(folderId, direction);
-        applySnapshot(await getLibrarySnapshot());
-      } catch (error) {
-        setErrorMessage(getStorageErrorMessage(error));
-      }
-    },
-    [applySnapshot],
-  );
-
   const handleMoveBook = useCallback(
-    async (book: BookMeta, folderId: string | undefined) => {
+    async (book: BookMeta) => {
+      const folderId = await select(`Move "${book.title}"`, {
+        confirmLabel: "Move",
+        inputLabel: "Destination folder",
+        defaultValue: book.virtualFolderId ?? "",
+        options: [
+          { label: "Library", value: "" },
+          ...folders
+            .map((folder) => ({
+              label: `Library / ${getFolderPath(folder, folders)}`,
+              value: folder.id,
+            }))
+            .sort((a, b) => a.label.localeCompare(b.label)),
+        ],
+      });
+      if (folderId === null) return;
+      const destinationId = folderId || undefined;
+      if (destinationId === book.virtualFolderId) return;
       setBooks((prev) =>
         prev.map((candidate) =>
           candidate.id === book.id
-            ? { ...candidate, virtualFolderId: folderId }
+            ? { ...candidate, virtualFolderId: destinationId }
             : candidate,
         ),
       );
       try {
-        await setBookVirtualFolder(book.id, folderId);
+        await setBookVirtualFolder(book.id, destinationId);
       } catch (error) {
         setErrorMessage(getStorageErrorMessage(error));
         applySnapshot(await getLibrarySnapshot());
       }
     },
-    [applySnapshot],
+    [applySnapshot, folders, select],
   );
 
   if (isLoading) {
@@ -497,14 +736,14 @@ function HomePage() {
   return (
     <Container>
       <Header>
-        <div>
-          <Title>My Library</Title>
+        <TitleContainer>
+          <Title>Epub Library</Title>
           <SubtleText>
             {libraryInfo?.folderName
               ? `Google Drive folder: ${libraryInfo.folderName}`
               : "Google Drive backed library"}
           </SubtleText>
-        </div>
+        </TitleContainer>
         <HeaderActions>
           {user && (
             <Account>
@@ -522,124 +761,112 @@ function HomePage() {
       </Header>
 
       <Toolbar>
-        <HeaderActions>
-          <Button type="button" onClick={handleRefresh} disabled={isRefreshing}>
-            {isRefreshing ? "Refreshing..." : "Refresh"}
-          </Button>
-          <Button
-            type="button"
-            onClick={handleChangeFolder}
-            disabled={isRefreshing}
-          >
-            Change Google Drive folder
-          </Button>
-          <Button
-            type="button"
-            onClick={handleClearCachedBooks}
-            disabled={isClearingCache}
-          >
-            {isClearingCache ? "Clearing..." : "Clear cached books"}
-          </Button>
-          <IconButton
-            aria-label="Toggle theme"
-            title={
-              theme === "light" ? "Switch to dark mode" : "Switch to light mode"
-            }
-            onClick={toggleTheme}
-          >
-            {theme === "light" ? "☾" : "☀"}
-          </IconButton>
+        <LibraryActions>
           <Button
             type="button"
             $variant="filled"
             onClick={handleAddFromDrive}
             disabled={isAdding}
           >
-            Add from Google Drive
+            Add
           </Button>
           <FilePicker
             onFileSelect={handleFileSelect}
             label="Upload"
             disabled={isAdding}
           />
-        </HeaderActions>
-      </Toolbar>
-
-      <Toolbar>
-        <FolderBar aria-label="Library views">
-          <FolderButton
-            type="button"
-            $active={activeFolder === "all"}
-            onClick={() => setActiveFolder("all")}
-          >
-            All
-          </FolderButton>
-          <FolderButton
-            type="button"
-            $active={activeFolder === "root"}
-            onClick={() => setActiveFolder("root")}
-          >
-            Library root
-          </FolderButton>
-          {folders.map((folder, index) => (
-            <FolderTools key={folder.id}>
-              <FolderButton
-                type="button"
-                $active={activeFolder === folder.id}
-                onClick={() => setActiveFolder(folder.id)}
-              >
-                {folder.name}
-              </FolderButton>
-              <Button
-                type="button"
-                onClick={() => void handleReorderFolder(folder.id, "up")}
-                disabled={index === 0}
-              >
-                ↑
-              </Button>
-              <Button
-                type="button"
-                onClick={() => void handleReorderFolder(folder.id, "down")}
-                disabled={index === folders.length - 1}
-              >
-                ↓
-              </Button>
-              <Button
-                type="button"
-                onClick={() => void handleRenameFolder(folder)}
-              >
-                Rename
-              </Button>
-              <Button
-                type="button"
-                onClick={() => void handleDeleteFolder(folder)}
-              >
-                Delete
-              </Button>
-            </FolderTools>
-          ))}
-        </FolderBar>
-        <FolderTools>
-          <TextInput
-            aria-label="New app folder name"
-            value={newFolderName}
-            onChange={(event) => setNewFolderName(event.target.value)}
-            placeholder="New app folder"
-          />
-          <Button
-            type="button"
-            onClick={handleCreateFolder}
-            disabled={!newFolderName.trim()}
-          >
+          <Button type="button" onClick={() => void handleCreateFolder()}>
             Create folder
           </Button>
-        </FolderTools>
+          <IconButton
+            type="button"
+            aria-label={isRefreshing ? "Refreshing library" : "Refresh library"}
+            title={isRefreshing ? "Refreshing library" : "Refresh library"}
+            onClick={handleRefresh}
+            disabled={isRefreshing}
+          >
+            ↻
+          </IconButton>
+          <SettingsMenu ref={settingsMenuRef}>
+            <SettingsSummary
+              aria-label="Library settings"
+              title="Library settings"
+            >
+              ⚙
+            </SettingsSummary>
+            <SettingsPanel role="menu">
+              <SettingsItem
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  closeSettingsMenu();
+                  void handleChangeFolder();
+                }}
+                disabled={isRefreshing}
+              >
+                Change Google Drive folder
+              </SettingsItem>
+              <SettingsItem
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  closeSettingsMenu();
+                  void handleClearCachedBooks();
+                }}
+                disabled={isClearingCache}
+              >
+                {isClearingCache ? "Clearing..." : "Clear cached books"}
+              </SettingsItem>
+              <SettingsItem
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  closeSettingsMenu();
+                  toggleTheme();
+                }}
+              >
+                {theme === "light"
+                  ? "Switch to dark theme"
+                  : "Switch to light theme"}
+              </SettingsItem>
+            </SettingsPanel>
+          </SettingsMenu>
+        </LibraryActions>
       </Toolbar>
+
+      <FolderNavigation aria-label="Library folders">
+        <Breadcrumb>
+          <BreadcrumbButton
+            type="button"
+            $current={!activeFolder}
+            onClick={() => setActiveFolder(undefined)}
+            aria-current={!activeFolder ? "page" : undefined}
+          >
+            Library
+          </BreadcrumbButton>
+          {folderPath.map((folder, index) => {
+            const isCurrent = index === folderPath.length - 1;
+            return (
+              <div key={folder.id}>
+                <span aria-hidden="true">/ </span>
+                <BreadcrumbButton
+                  type="button"
+                  $current={isCurrent}
+                  onClick={() => setActiveFolder(folder.id)}
+                  aria-current={isCurrent ? "page" : undefined}
+                >
+                  {folder.name}
+                </BreadcrumbButton>
+              </div>
+            );
+          })}
+        </Breadcrumb>
+      </FolderNavigation>
 
       {progressMessage && <StatusText>{progressMessage}</StatusText>}
       {errorMessage && <ErrorText>{errorMessage}</ErrorText>}
 
-      {books.length === 0 ? (
+      {books.length === 0 && childFolders.length === 0 ? (
         <EmptyState>
           <EmptyTitle>Your library is empty</EmptyTitle>
           <EmptyText>
@@ -647,20 +874,50 @@ function HomePage() {
             this library only; they do not create or move Google Drive folders.
           </EmptyText>
         </EmptyState>
-      ) : visibleBooks.length === 0 ? (
+      ) : visibleBooks.length === 0 && childFolders.length === 0 ? (
         <EmptyState>
           <EmptyTitle>No books here</EmptyTitle>
           <EmptyText>
-            Move books into this app folder from the book controls.
+            Add a book here or open one of the folders above.
           </EmptyText>
         </EmptyState>
       ) : (
         <LibraryGrid>
+          {childFolders.map((folder) => (
+            <FolderCard key={folder.id}>
+              <FolderOpenButton
+                type="button"
+                onClick={() => setActiveFolder(folder.id)}
+              >
+                <FolderCover aria-hidden="true">
+                  <FolderShape />
+                </FolderCover>
+                <FolderTitle title={folder.name}>{folder.name}</FolderTitle>
+              </FolderOpenButton>
+              <RenameFolderButton
+                type="button"
+                className="folder-action"
+                onClick={() => void handleRenameFolder(folder)}
+                aria-label={`Rename ${folder.name}`}
+                title="Rename folder"
+              >
+                ✎
+              </RenameFolderButton>
+              <DeleteFolderButton
+                type="button"
+                className="folder-action"
+                onClick={() => void handleDeleteFolder(folder)}
+                aria-label={`Delete ${folder.name}`}
+                title="Delete folder"
+              >
+                X
+              </DeleteFolderButton>
+            </FolderCard>
+          ))}
           {visibleBooks.map((book) => (
             <BookCard
               key={book.id}
               book={book}
-              folders={folders}
               onClick={handleBookClick}
               onRemove={handleRemoveBook}
               onClearCache={handleClearCache}
@@ -682,6 +939,24 @@ function formatProgress(
 ): string {
   if (!total || loaded === undefined) return message;
   return `${message} ${Math.round((loaded / total) * 100)}%`;
+}
+
+function getFolderPath(
+  folder: VirtualFolder,
+  folders: VirtualFolder[],
+): string {
+  const byId = new Map(folders.map((candidate) => [candidate.id, candidate]));
+  const names = [folder.name];
+  const visited = new Set([folder.id]);
+  let parentId = folder.parentId;
+  while (parentId && !visited.has(parentId)) {
+    visited.add(parentId);
+    const parent = byId.get(parentId);
+    if (!parent) break;
+    names.unshift(parent.name);
+    parentId = parent.parentId;
+  }
+  return names.join(" / ");
 }
 
 export default HomePage;
