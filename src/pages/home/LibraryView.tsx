@@ -1,17 +1,10 @@
 import { useMemo } from "react";
 import styled from "@emotion/styled";
-import DeleteIcon from "@mui/icons-material/DeleteOutlined";
-import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
-import FolderIcon from "@mui/icons-material/Folder";
 import NavigateNextIcon from "@mui/icons-material/NavigateNext";
-import ButtonBase from "@mui/material/ButtonBase";
 import Breadcrumbs from "@mui/material/Breadcrumbs";
-import IconButton from "@mui/material/IconButton";
 import Link from "@mui/material/Link";
-import Paper from "@mui/material/Paper";
-import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
-import { BookCard } from "../../components";
+import { BookCard, FolderCard } from "../../components";
 import type { BookMeta, VirtualFolder } from "../../types";
 
 const breadcrumbItemSx = {
@@ -20,99 +13,6 @@ const breadcrumbItemSx = {
   textOverflow: "ellipsis",
   whiteSpace: "nowrap",
 } as const;
-
-const FolderCard = styled.div`
-  position: relative;
-  width: 140px;
-
-  &:hover .folder-action,
-  &:focus-within .folder-action {
-    opacity: 1;
-  }
-`;
-
-const FolderOpenButton = styled(ButtonBase)`
-  display: flex;
-  flex-direction: column;
-  width: 100%;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: inherit;
-  cursor: pointer;
-  font: inherit;
-  text-align: left;
-  transition: transform 0.2s;
-
-  &:hover {
-    transform: translateY(-4px);
-  }
-
-  &:focus-visible {
-    outline: 2px solid var(--accent);
-    outline-offset: 2px;
-    border-radius: 4px;
-  }
-`;
-
-const FolderCover = styled(Paper)`
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 140px;
-  height: 200px;
-  border: 1px solid var(--accent-border);
-  border-radius: 4px;
-  background: var(--accent-bg);
-  box-shadow: 0 2px 8px rgb(0 0 0 / 15%);
-`;
-
-const FolderTitle = styled.div`
-  width: 100%;
-  margin-top: 0.5rem;
-  overflow: hidden;
-  color: var(--text-heading);
-  font-size: 0.875rem;
-  font-weight: 500;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-`;
-
-const FolderAction = styled(IconButton)`
-  position: absolute;
-  right: 4px;
-  width: 24px;
-  height: 24px;
-  border: 0;
-  border-radius: 50%;
-  background: var(--overlay-strong);
-  color: white;
-  cursor: pointer;
-  opacity: 0;
-  transition: opacity 0.2s;
-
-  &:focus-visible {
-    opacity: 1;
-    outline: 2px solid var(--accent);
-    outline-offset: 2px;
-  }
-`;
-
-const RenameFolderButton = styled(FolderAction)`
-  top: 4px;
-
-  &:hover {
-    background: var(--info);
-  }
-`;
-
-const DeleteFolderButton = styled(FolderAction)`
-  top: 36px;
-
-  &:hover {
-    background: var(--danger);
-  }
-`;
 
 const LibraryGrid = styled.div`
   display: grid;
@@ -200,7 +100,6 @@ function LibraryView({
         separator={<NavigateNextIcon fontSize="small" />}
         sx={{
           mb: 3,
-          color: "var(--text)",
           "& .MuiBreadcrumbs-ol": { flexWrap: "nowrap" },
         }}
       >
@@ -283,35 +182,15 @@ function LibraryView({
       ) : (
         <LibraryGrid>
           {childFolders.map((folder) => (
-            <FolderCard key={folder.id}>
-              <FolderOpenButton
-                type="button"
-                onClick={() => onFolderChange(folder.id)}
-              >
-                <FolderCover elevation={1} aria-hidden="true">
-                  <FolderIcon sx={{ color: "var(--accent)", fontSize: 82 }} />
-                </FolderCover>
-                <FolderTitle title={folder.name}>{folder.name}</FolderTitle>
-              </FolderOpenButton>
-              <Tooltip title="Rename folder">
-                <RenameFolderButton
-                  className="folder-action"
-                  onClick={() => onRenameFolder(folder)}
-                  aria-label={`Rename ${folder.name}`}
-                >
-                  <EditOutlinedIcon sx={{ fontSize: 15 }} />
-                </RenameFolderButton>
-              </Tooltip>
-              <Tooltip title="Delete folder">
-                <DeleteFolderButton
-                  className="folder-action"
-                  onClick={() => onDeleteFolder(folder)}
-                  aria-label={`Delete ${folder.name}`}
-                >
-                  <DeleteIcon sx={{ fontSize: 15 }} />
-                </DeleteFolderButton>
-              </Tooltip>
-            </FolderCard>
+            <FolderCard
+              key={folder.id}
+              folder={folder}
+              onClick={(selectedFolder) =>
+                onFolderChange(selectedFolder.id)
+              }
+              onRename={onRenameFolder}
+              onDelete={onDeleteFolder}
+            />
           ))}
           {visibleBooks.map((book) => (
             <BookCard

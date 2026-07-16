@@ -82,11 +82,9 @@ const PlaceholderCover = styled.div`
 const Title = styled.div`
   margin-top: 0.5rem;
   font-size: 0.875rem;
-  font-weight: 500;
   color: var(--text-heading);
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
 `;
 
 const Author = styled.div`
@@ -94,7 +92,7 @@ const Author = styled.div`
   color: var(--text);
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
+  align-self: flex-start;
 `;
 
 const ActionOverlay = styled.div`
