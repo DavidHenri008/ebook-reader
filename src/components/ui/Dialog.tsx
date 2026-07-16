@@ -121,6 +121,15 @@ function Dialog({ state, onConfirm, onCancel }: DialogProps) {
 const buttonStyles = {
   color: "var(--accent)",
   textTransform: "none",
+  "&.MuiButton-contained": {
+    bgcolor: "var(--accent-bg)",
+    "&:hover": { bgcolor: "var(--accent-bg)" },
+  },
+  "&.Mui-disabled": {
+    bgcolor: "var(--accent-bg)",
+    color: "var(--text)",
+    opacity: 0.55,
+  },
 };
 
 const fieldStyles = {

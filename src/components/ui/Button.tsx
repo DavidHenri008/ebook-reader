@@ -28,10 +28,11 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
         fontSize: "1rem",
         fontWeight: 500,
         textTransform: "none",
+        border: "1px solid var(--border)",
         "&:hover": {
           borderColor: "var(--accent-border)",
-          bgcolor: "var(--accent-bg)",
           color: "var(--accent)",
+          border: "1px solid currentColor",
         },
         ...sx,
       }}
@@ -54,8 +55,8 @@ const IconButton = forwardRef<HTMLButtonElement, MuiIconButtonProps>(
           color: "var(--text)",
           "&:hover": {
             borderColor: "var(--accent-border)",
-            bgcolor: "var(--accent-bg)",
             color: "var(--accent)",
+            border: "1px solid currentColor",
           },
           ...sx,
         }}
