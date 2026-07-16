@@ -50,7 +50,6 @@ function FilePicker({
       />
       <Button
         type="button"
-        $variant="filled"
         onClick={handleClick}
         disabled={disabled}
         startIcon={

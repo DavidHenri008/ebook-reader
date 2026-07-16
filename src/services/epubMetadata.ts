@@ -14,10 +14,13 @@ type EpubMetadataBook = {
   loaded: {
     resources: Promise<unknown>;
     metadata: Promise<EpubMetadata>;
+    cover: Promise<string | undefined>;
   };
+  archived: boolean;
+  archive?: { getBlob: (path: string) => Promise<Blob> | undefined };
+  cover?: string;
   resources?: { replaceCss?: () => Promise<unknown> };
   spine?: { hooks?: { serialize?: { clear: () => void } } };
-  coverUrl: () => Promise<string | null>;
   destroy: () => void;
 };
 
@@ -45,14 +48,17 @@ export async function extractEpubMetadata(
     // Try to extract cover as base64 data URL (blob URLs expire after book.destroy)
     let coverUrl: string | undefined;
     try {
-      const blobUrl = await book.coverUrl();
-      if (blobUrl) {
-        const response = await fetch(blobUrl);
-        const blob = await response.blob();
-        coverUrl = await blobToDataUrl(blob);
+      await book.loaded.cover;
+      if (book.archived && book.archive && book.cover) {
+        const blob = await book.archive.getBlob(book.cover);
+        if (blob) {
+          coverUrl = await blobToDataUrl(blob);
+        }
       }
-    } catch {
-      // No cover available
+    } catch (error) {
+      if (import.meta.env.DEV) {
+        console.warn("Failed to extract EPUB cover:", error);
+      }
     }
 
     return { title, author, coverUrl };

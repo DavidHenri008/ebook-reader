@@ -1,10 +1,15 @@
+import { useId, useState } from "react";
 import styled from "@emotion/styled";
 import ClearAllIcon from "@mui/icons-material/ClearAll";
 import DriveFileMoveIcon from "@mui/icons-material/DriveFileMove";
+import MoreVertIcon from "@mui/icons-material/MoreVert";
 import RemoveCircleIcon from "@mui/icons-material/RemoveCircleOutlined";
 import ButtonBase from "@mui/material/ButtonBase";
 import CircularProgress from "@mui/material/CircularProgress";
 import IconButton from "@mui/material/IconButton";
+import ListItemIcon from "@mui/material/ListItemIcon";
+import Menu from "@mui/material/Menu";
+import MenuItem from "@mui/material/MenuItem";
 import Tooltip from "@mui/material/Tooltip";
 import type { BookMeta } from "../types";
 
@@ -12,11 +17,6 @@ import type { BookMeta } from "../types";
 const Card = styled.div`
   position: relative;
   width: 140px;
-
-  &:hover .action-btn,
-  &:focus-within .action-btn {
-    opacity: 1;
-  }
 `;
 
 const OpenButton = styled(ButtonBase)`
@@ -95,60 +95,29 @@ const Author = styled.div`
   align-self: flex-start;
 `;
 
-const ActionOverlay = styled.div`
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 140px;
-  height: 200px;
-  pointer-events: none;
-`;
-
-const ActionButton = styled(IconButton)`
+const ActionMenuButton = styled(IconButton)`
   position: absolute;
   right: 4px;
-  width: 24px;
-  height: 24px;
+  top: 4px;
+  z-index: 1;
+  width: 40px;
+  height: 40px;
   border: none;
   border-radius: 50%;
   background-color: var(--overlay-strong);
   color: white;
   cursor: pointer;
-  opacity: 0;
-  pointer-events: auto;
-  transition: opacity 0.2s;
   display: flex;
   align-items: center;
   justify-content: center;
 
-  &:focus-visible {
-    opacity: 1;
+  &:hover {
+    background-color: var(--overlay-strong);
+  }
+
+  &.Mui-focusVisible {
     outline: 2px solid var(--accent);
     outline-offset: 2px;
-  }
-`;
-
-const RemoveButton = styled(ActionButton)`
-  top: 4px;
-
-  &:hover {
-    background-color: var(--danger);
-  }
-`;
-
-const ClearCacheButton = styled(ActionButton)`
-  bottom: 4px;
-
-  &:hover {
-    background-color: var(--info);
-  }
-`;
-
-const MoveButton = styled(ActionButton)`
-  top: 36px;
-
-  &:hover {
-    background-color: var(--info);
   }
 `;
 
@@ -197,15 +166,9 @@ function BookCard({
   isExtracting = false,
   status,
 }: BookCardProps) {
-  const handleRemove = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    onRemove(book);
-  };
-
-  const handleClearCache = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    onClearCache(book);
-  };
+  const menuId = useId();
+  const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null);
+  const closeMenu = () => setMenuAnchor(null);
 
   return (
     <Card>
@@ -239,37 +202,61 @@ function BookCard({
         <Title title={book.title}>{book.title}</Title>
         {book.author && <Author title={book.author}>{book.author}</Author>}
       </OpenButton>
-      <ActionOverlay>
-        <Tooltip title="Remove from library; keeps the file in Google Drive">
-          <RemoveButton
-            className="action-btn"
-            onClick={handleRemove}
-            aria-label={`Remove ${book.title} from library and keep the Google Drive file`}
-          >
-            <RemoveCircleIcon sx={{ fontSize: 16 }} />
-          </RemoveButton>
-        </Tooltip>
+      <Tooltip title={`Actions for ${book.title}`}>
+        <ActionMenuButton
+          aria-label={`Actions for ${book.title}`}
+          aria-controls={menuAnchor ? menuId : undefined}
+          aria-haspopup="true"
+          aria-expanded={menuAnchor ? "true" : undefined}
+          onClick={(event) => setMenuAnchor(event.currentTarget)}
+        >
+          <MoreVertIcon />
+        </ActionMenuButton>
+      </Tooltip>
+      <Menu
+        id={menuId}
+        anchorEl={menuAnchor}
+        open={Boolean(menuAnchor)}
+        onClose={closeMenu}
+        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+        transformOrigin={{ vertical: "top", horizontal: "right" }}
+      >
         {onMove && (
-          <Tooltip title="Move to folder">
-            <MoveButton
-              className="action-btn"
-              onClick={() => onMove(book)}
-              aria-label={`Move ${book.title} to another folder`}
-            >
-              <DriveFileMoveIcon sx={{ fontSize: 16 }} />
-            </MoveButton>
-          </Tooltip>
-        )}
-        <Tooltip title="Clear extraction cache">
-          <ClearCacheButton
-            className="action-btn"
-            onClick={handleClearCache}
-            aria-label={`Clear extraction cache for ${book.title}`}
+          <MenuItem
+            onClick={() => {
+              closeMenu();
+              onMove(book);
+            }}
           >
-            <ClearAllIcon sx={{ fontSize: 16 }} />
-          </ClearCacheButton>
-        </Tooltip>
-      </ActionOverlay>
+            <ListItemIcon>
+              <DriveFileMoveIcon />
+            </ListItemIcon>
+            Move to folder
+          </MenuItem>
+        )}
+        <MenuItem
+          onClick={() => {
+            closeMenu();
+            onClearCache(book);
+          }}
+        >
+          <ListItemIcon>
+            <ClearAllIcon />
+          </ListItemIcon>
+          Clear extraction cache
+        </MenuItem>
+        <MenuItem
+          onClick={() => {
+            closeMenu();
+            onRemove(book);
+          }}
+        >
+          <ListItemIcon>
+            <RemoveCircleIcon color="error" />
+          </ListItemIcon>
+          Remove from library
+        </MenuItem>
+      </Menu>
     </Card>
   );
 }

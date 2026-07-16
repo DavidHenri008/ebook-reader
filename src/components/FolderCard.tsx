@@ -1,9 +1,14 @@
+import { useId, useState } from "react";
 import styled from "@emotion/styled";
 import DeleteIcon from "@mui/icons-material/DeleteOutlined";
 import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
 import FolderIcon from "@mui/icons-material/Folder";
+import MoreVertIcon from "@mui/icons-material/MoreVert";
 import ButtonBase from "@mui/material/ButtonBase";
 import IconButton from "@mui/material/IconButton";
+import ListItemIcon from "@mui/material/ListItemIcon";
+import Menu from "@mui/material/Menu";
+import MenuItem from "@mui/material/MenuItem";
 import Paper from "@mui/material/Paper";
 import Tooltip from "@mui/material/Tooltip";
 import type { VirtualFolder } from "../types";
@@ -11,11 +16,6 @@ import type { VirtualFolder } from "../types";
 const Card = styled.div`
   position: relative;
   width: 140px;
-
-  &:hover .folder-action,
-  &:focus-within .folder-action {
-    opacity: 1;
-  }
 `;
 
 const OpenButton = styled(ButtonBase)`
@@ -63,39 +63,26 @@ const Title = styled.div`
   text-overflow: ellipsis;
 `;
 
-const ActionButton = styled(IconButton)`
+const ActionMenuButton = styled(IconButton)`
   position: absolute;
   right: 4px;
-  width: 24px;
-  height: 24px;
+  top: 4px;
+  z-index: 1;
+  width: 40px;
+  height: 40px;
   border: 0;
   border-radius: 50%;
   background: var(--overlay-strong);
   color: white;
   cursor: pointer;
-  opacity: 0;
-  transition: opacity 0.2s;
 
-  &:focus-visible {
-    opacity: 1;
+  &:hover {
+    background: var(--overlay-strong);
+  }
+
+  &.Mui-focusVisible {
     outline: 2px solid var(--accent);
     outline-offset: 2px;
-  }
-`;
-
-const RenameButton = styled(ActionButton)`
-  top: 4px;
-
-  &:hover {
-    background: var(--info);
-  }
-`;
-
-const DeleteButton = styled(ActionButton)`
-  top: 36px;
-
-  &:hover {
-    background: var(--danger);
   }
 `;
 
@@ -106,12 +93,11 @@ interface FolderCardProps {
   onDelete: (folder: VirtualFolder) => void;
 }
 
-function FolderCard({
-  folder,
-  onClick,
-  onRename,
-  onDelete,
-}: FolderCardProps) {
+function FolderCard({ folder, onClick, onRename, onDelete }: FolderCardProps) {
+  const menuId = useId();
+  const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null);
+  const closeMenu = () => setMenuAnchor(null);
+
   return (
     <Card>
       <OpenButton type="button" onClick={() => onClick(folder)}>
@@ -120,24 +106,48 @@ function FolderCard({
         </Cover>
         <Title title={folder.name}>{folder.name}</Title>
       </OpenButton>
-      <Tooltip title="Rename folder">
-        <RenameButton
-          className="folder-action"
-          onClick={() => onRename(folder)}
-          aria-label={`Rename ${folder.name}`}
+      <Tooltip title={`Actions for ${folder.name}`}>
+        <ActionMenuButton
+          aria-label={`Actions for ${folder.name}`}
+          aria-controls={menuAnchor ? menuId : undefined}
+          aria-haspopup="true"
+          aria-expanded={menuAnchor ? "true" : undefined}
+          onClick={(event) => setMenuAnchor(event.currentTarget)}
         >
-          <EditOutlinedIcon sx={{ fontSize: 15 }} />
-        </RenameButton>
+          <MoreVertIcon />
+        </ActionMenuButton>
       </Tooltip>
-      <Tooltip title="Delete folder">
-        <DeleteButton
-          className="folder-action"
-          onClick={() => onDelete(folder)}
-          aria-label={`Delete ${folder.name}`}
+      <Menu
+        id={menuId}
+        anchorEl={menuAnchor}
+        open={Boolean(menuAnchor)}
+        onClose={closeMenu}
+        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+        transformOrigin={{ vertical: "top", horizontal: "right" }}
+      >
+        <MenuItem
+          onClick={() => {
+            closeMenu();
+            onRename(folder);
+          }}
         >
-          <DeleteIcon sx={{ fontSize: 15 }} />
-        </DeleteButton>
-      </Tooltip>
+          <ListItemIcon>
+            <EditOutlinedIcon />
+          </ListItemIcon>
+          Rename folder
+        </MenuItem>
+        <MenuItem
+          onClick={() => {
+            closeMenu();
+            onDelete(folder);
+          }}
+        >
+          <ListItemIcon>
+            <DeleteIcon color="error" />
+          </ListItemIcon>
+          Delete folder
+        </MenuItem>
+      </Menu>
     </Card>
   );
 }

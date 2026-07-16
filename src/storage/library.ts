@@ -43,6 +43,22 @@ export interface CacheValidationResult {
   currentFingerprint: DriveFileFingerprint;
 }
 
+export async function hydrateBookCover(bookId: string): Promise<BookMeta> {
+  const book = await requireBook(bookId);
+  if (book.coverUrl || !book.driveFileId) return book;
+
+  const fileData = await downloadDriveFile(book.driveFileId);
+  const metadata = await extractEpubMetadata(fileData, book.filename);
+  if (!metadata.coverUrl) return book;
+
+  const updatedBook = {
+    ...book,
+    coverUrl: metadata.coverUrl,
+  };
+  await upsertBook(updatedBook);
+  return updatedBook;
+}
+
 export async function getLibrarySnapshot(): Promise<LibrarySnapshot> {
   const manifest = await ensureDriveLibrary({ promptIfMissing: false });
   return toSnapshot(manifest);
@@ -267,11 +283,22 @@ export async function fetchBookFileForExtraction(
 
   const updatedBook: BookMeta = {
     ...book,
+    coverUrl:
+      book.coverUrl ??
+      (
+        await extractEpubMetadata(
+          fileData,
+          metadata.name || book.filename,
+        )
+      ).coverUrl,
     filename: metadata.name || book.filename,
     fileSize: Number(metadata.size ?? fileData.byteLength),
     driveFingerprint: currentFingerprint,
   };
-  if (!fingerprintsMatch(book.driveFingerprint, currentFingerprint)) {
+  if (
+    !fingerprintsMatch(book.driveFingerprint, currentFingerprint) ||
+    updatedBook.coverUrl !== book.coverUrl
+  ) {
     await upsertBook(updatedBook);
   }
 

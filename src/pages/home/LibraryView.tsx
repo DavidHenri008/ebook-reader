@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useDeferredValue, useMemo } from "react";
 import styled from "@emotion/styled";
 import NavigateNextIcon from "@mui/icons-material/NavigateNext";
 import Breadcrumbs from "@mui/material/Breadcrumbs";
@@ -48,6 +48,8 @@ interface LibraryViewProps {
   folders: VirtualFolder[];
   activeFolder?: string;
   isAdding: boolean;
+  searchQuery: string;
+  sortDirection: "asc" | "desc";
   onFolderChange: (folderId?: string) => void;
   onBookClick: (book: BookMeta) => void;
   onRemoveBook: (book: BookMeta) => void;
@@ -62,6 +64,8 @@ function LibraryView({
   folders,
   activeFolder,
   isAdding,
+  searchQuery,
+  sortDirection,
   onFolderChange,
   onBookClick,
   onRemoveBook,
@@ -70,13 +74,39 @@ function LibraryView({
   onRenameFolder,
   onDeleteFolder,
 }: LibraryViewProps) {
+  const deferredSearchQuery = useDeferredValue(searchQuery);
+  const normalizedQuery = deferredSearchQuery.trim().toLocaleLowerCase();
+  const collator = useMemo(
+    () => new Intl.Collator(undefined, { numeric: true, sensitivity: "base" }),
+    [],
+  );
   const visibleBooks = useMemo(
-    () => books.filter((book) => book.virtualFolderId === activeFolder),
-    [activeFolder, books],
+    () =>
+      books
+        .filter((book) => book.virtualFolderId === activeFolder)
+        .filter((book) =>
+          [book.title, book.author, book.filename].some((value) =>
+            value?.toLocaleLowerCase().includes(normalizedQuery),
+          ),
+        )
+        .sort((left, right) => {
+          const comparison = collator.compare(left.title, right.title);
+          return sortDirection === "asc" ? comparison : -comparison;
+        }),
+    [activeFolder, books, collator, normalizedQuery, sortDirection],
   );
   const childFolders = useMemo(
-    () => folders.filter((folder) => folder.parentId === activeFolder),
-    [activeFolder, folders],
+    () =>
+      folders
+        .filter((folder) => folder.parentId === activeFolder)
+        .filter((folder) =>
+          folder.name.toLocaleLowerCase().includes(normalizedQuery),
+        )
+        .sort((left, right) => {
+          const comparison = collator.compare(left.name, right.name);
+          return sortDirection === "asc" ? comparison : -comparison;
+        }),
+    [activeFolder, collator, folders, normalizedQuery, sortDirection],
   );
   const folderPath = useMemo(() => {
     const byId = new Map(folders.map((folder) => [folder.id, folder]));
@@ -164,13 +194,20 @@ function LibraryView({
         })}
       </Breadcrumbs>
 
-      {books.length === 0 && childFolders.length === 0 ? (
+      {books.length === 0 && folders.length === 0 ? (
         <EmptyState>
           <EmptyTitle>Your library is empty</EmptyTitle>
           <EmptyText>
             Upload an EPUB or add one from Google Drive. App folders organize
             this library only; they do not create or move Google Drive folders.
           </EmptyText>
+        </EmptyState>
+      ) : normalizedQuery &&
+        visibleBooks.length === 0 &&
+        childFolders.length === 0 ? (
+        <EmptyState>
+          <EmptyTitle>No matches</EmptyTitle>
+          <EmptyText>Try a different search.</EmptyText>
         </EmptyState>
       ) : visibleBooks.length === 0 && childFolders.length === 0 ? (
         <EmptyState>
@@ -185,9 +222,7 @@ function LibraryView({
             <FolderCard
               key={folder.id}
               folder={folder}
-              onClick={(selectedFolder) =>
-                onFolderChange(selectedFolder.id)
-              }
+              onClick={(selectedFolder) => onFolderChange(selectedFolder.id)}
               onRename={onRenameFolder}
               onDelete={onDeleteFolder}
             />

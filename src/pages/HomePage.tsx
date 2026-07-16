@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import styled from "@emotion/styled";
 import { useNavigate } from "@tanstack/react-router";
 import { Button } from "../components";
@@ -19,6 +19,7 @@ import {
   deleteRawBook,
   getLibrarySnapshot,
   getStorageErrorMessage,
+  hydrateBookCover,
   loadLibraryTheme,
   refreshLibrary,
   removeBookFromLibrary,
@@ -92,6 +93,9 @@ function HomePage() {
   const [progressMessage, setProgressMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [activeFolder, setActiveFolder] = useState<string | undefined>();
+  const [searchQuery, setSearchQuery] = useState("");
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
+  const attemptedCoverIds = useRef(new Set<string>());
   const [theme, setTheme] = useAppTheme();
   const { confirm, alert, prompt, select, dialog } = useDialogs();
 
@@ -130,6 +134,38 @@ function HomePage() {
   useEffect(() => {
     void loadLibrary();
   }, [loadLibrary]);
+
+  useEffect(() => {
+    const booksWithoutCovers = books.filter(
+      (book) =>
+        !book.coverUrl &&
+        book.driveFileId &&
+        !attemptedCoverIds.current.has(book.id),
+    );
+    if (isLoading || booksWithoutCovers.length === 0) return;
+
+    let cancelled = false;
+    void (async () => {
+      for (const book of booksWithoutCovers) {
+        attemptedCoverIds.current.add(book.id);
+        try {
+          const hydrated = await hydrateBookCover(book.id);
+          if (cancelled) return;
+          setBooks((current) =>
+            current.map((candidate) =>
+              candidate.id === hydrated.id ? hydrated : candidate,
+            ),
+          );
+        } catch (error) {
+          console.warn(`Failed to load cover for ${book.title}:`, error);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [books, isLoading]);
 
   const toggleTheme = useCallback(() => {
     const nextTheme = theme === "light" ? "dark" : "light";
@@ -409,6 +445,8 @@ function HomePage() {
         isRefreshing={isRefreshing}
         isClearingCache={isClearingCache}
         theme={theme}
+        searchQuery={searchQuery}
+        sortDirection={sortDirection}
         onAddFromDrive={() => void handleAddFromDrive()}
         onFileSelect={handleFileSelect}
         onCreateFolder={() => void handleCreateFolder()}
@@ -416,6 +454,10 @@ function HomePage() {
         onChangeFolder={() => void handleChangeFolder()}
         onClearCachedBooks={() => void handleClearCachedBooks()}
         onToggleTheme={toggleTheme}
+        onSearchQueryChange={setSearchQuery}
+        onToggleSortDirection={() =>
+          setSortDirection((current) => (current === "asc" ? "desc" : "asc"))
+        }
       />
 
       {progressMessage && <StatusText>{progressMessage}</StatusText>}
@@ -425,6 +467,8 @@ function HomePage() {
         folders={folders}
         activeFolder={activeFolder}
         isAdding={isAdding}
+        searchQuery={searchQuery}
+        sortDirection={sortDirection}
         onFolderChange={setActiveFolder}
         onBookClick={handleBookClick}
         onRemoveBook={(book) => void handleRemoveBook(book)}
