@@ -1,41 +1,25 @@
 import { useMemo } from "react";
 import styled from "@emotion/styled";
+import DeleteIcon from "@mui/icons-material/DeleteOutlined";
+import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
+import FolderIcon from "@mui/icons-material/Folder";
+import NavigateNextIcon from "@mui/icons-material/NavigateNext";
+import ButtonBase from "@mui/material/ButtonBase";
+import Breadcrumbs from "@mui/material/Breadcrumbs";
+import IconButton from "@mui/material/IconButton";
+import Link from "@mui/material/Link";
+import Paper from "@mui/material/Paper";
+import Tooltip from "@mui/material/Tooltip";
+import Typography from "@mui/material/Typography";
 import { BookCard } from "../../components";
 import type { BookMeta, VirtualFolder } from "../../types";
 
-const FolderNavigation = styled.nav`
-  display: grid;
-  gap: 0.75rem;
-  margin-bottom: 1.5rem;
-`;
-
-const Breadcrumb = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  min-width: 0;
-  color: var(--text);
-`;
-
-const BreadcrumbButton = styled.button<{ $current?: boolean }>`
-  min-width: 0;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: ${(props) =>
-    props.$current ? "var(--text-heading)" : "var(--accent)"};
-  cursor: ${(props) => (props.$current ? "default" : "pointer")};
-  font: inherit;
-  font-weight: ${(props) => (props.$current ? 600 : 400)};
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-
-  &:focus-visible {
-    outline: 2px solid var(--accent);
-    outline-offset: 2px;
-  }
-`;
+const breadcrumbItemSx = {
+  minWidth: 0,
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+} as const;
 
 const FolderCard = styled.div`
   position: relative;
@@ -47,7 +31,7 @@ const FolderCard = styled.div`
   }
 `;
 
-const FolderOpenButton = styled.button`
+const FolderOpenButton = styled(ButtonBase)`
   display: flex;
   flex-direction: column;
   width: 100%;
@@ -71,7 +55,7 @@ const FolderOpenButton = styled.button`
   }
 `;
 
-const FolderCover = styled.div`
+const FolderCover = styled(Paper)`
   display: flex;
   align-items: center;
   justify-content: center;
@@ -81,25 +65,6 @@ const FolderCover = styled.div`
   border-radius: 4px;
   background: var(--accent-bg);
   box-shadow: 0 2px 8px rgb(0 0 0 / 15%);
-`;
-
-const FolderShape = styled.div`
-  position: relative;
-  width: 82px;
-  height: 58px;
-  border-radius: 4px;
-  background: var(--accent);
-
-  &::before {
-    position: absolute;
-    top: -12px;
-    left: 0;
-    width: 36px;
-    height: 16px;
-    border-radius: 4px 4px 0 0;
-    background: var(--accent);
-    content: "";
-  }
 `;
 
 const FolderTitle = styled.div`
@@ -113,7 +78,7 @@ const FolderTitle = styled.div`
   white-space: nowrap;
 `;
 
-const FolderAction = styled.button`
+const FolderAction = styled(IconButton)`
   position: absolute;
   right: 4px;
   width: 24px;
@@ -123,7 +88,6 @@ const FolderAction = styled.button`
   background: var(--overlay-strong);
   color: white;
   cursor: pointer;
-  font-size: 14px;
   opacity: 0;
   transition: opacity 0.2s;
 
@@ -231,34 +195,75 @@ function LibraryView({
 
   return (
     <>
-      <FolderNavigation aria-label="Library folders">
-        <Breadcrumb>
-          <BreadcrumbButton
-            type="button"
-            $current={!activeFolder}
-            onClick={() => onFolderChange()}
-            aria-current={!activeFolder ? "page" : undefined}
+      <Breadcrumbs
+        aria-label="Library folders"
+        separator={<NavigateNextIcon fontSize="small" />}
+        sx={{
+          mb: 3,
+          color: "var(--text)",
+          "& .MuiBreadcrumbs-ol": { flexWrap: "nowrap" },
+        }}
+      >
+        {!activeFolder ? (
+          <Typography
+            aria-current="page"
+            sx={{
+              ...breadcrumbItemSx,
+              color: "var(--text-heading)",
+              fontWeight: 600,
+            }}
           >
             Library
-          </BreadcrumbButton>
-          {folderPath.map((folder, index) => {
-            const isCurrent = index === folderPath.length - 1;
-            return (
-              <div key={folder.id}>
-                <span aria-hidden="true">/ </span>
-                <BreadcrumbButton
-                  type="button"
-                  $current={isCurrent}
-                  onClick={() => onFolderChange(folder.id)}
-                  aria-current={isCurrent ? "page" : undefined}
-                >
-                  {folder.name}
-                </BreadcrumbButton>
-              </div>
-            );
-          })}
-        </Breadcrumb>
-      </FolderNavigation>
+          </Typography>
+        ) : (
+          <Link
+            component="button"
+            type="button"
+            underline="hover"
+            onClick={() => onFolderChange()}
+            sx={{
+              ...breadcrumbItemSx,
+              color: "var(--accent)",
+              font: "inherit",
+              textAlign: "left",
+            }}
+          >
+            Library
+          </Link>
+        )}
+        {folderPath.map((folder, index) => {
+          const isCurrent = index === folderPath.length - 1;
+          return isCurrent ? (
+            <Typography
+              key={folder.id}
+              aria-current="page"
+              sx={{
+                ...breadcrumbItemSx,
+                color: "var(--text-heading)",
+                fontWeight: 600,
+              }}
+            >
+              {folder.name}
+            </Typography>
+          ) : (
+            <Link
+              key={folder.id}
+              component="button"
+              type="button"
+              underline="hover"
+              onClick={() => onFolderChange(folder.id)}
+              sx={{
+                ...breadcrumbItemSx,
+                color: "var(--accent)",
+                font: "inherit",
+                textAlign: "left",
+              }}
+            >
+              {folder.name}
+            </Link>
+          );
+        })}
+      </Breadcrumbs>
 
       {books.length === 0 && childFolders.length === 0 ? (
         <EmptyState>
@@ -283,29 +288,29 @@ function LibraryView({
                 type="button"
                 onClick={() => onFolderChange(folder.id)}
               >
-                <FolderCover aria-hidden="true">
-                  <FolderShape />
+                <FolderCover elevation={1} aria-hidden="true">
+                  <FolderIcon sx={{ color: "var(--accent)", fontSize: 82 }} />
                 </FolderCover>
                 <FolderTitle title={folder.name}>{folder.name}</FolderTitle>
               </FolderOpenButton>
-              <RenameFolderButton
-                type="button"
-                className="folder-action"
-                onClick={() => onRenameFolder(folder)}
-                aria-label={`Rename ${folder.name}`}
-                title="Rename folder"
-              >
-                ✎
-              </RenameFolderButton>
-              <DeleteFolderButton
-                type="button"
-                className="folder-action"
-                onClick={() => onDeleteFolder(folder)}
-                aria-label={`Delete ${folder.name}`}
-                title="Delete folder"
-              >
-                X
-              </DeleteFolderButton>
+              <Tooltip title="Rename folder">
+                <RenameFolderButton
+                  className="folder-action"
+                  onClick={() => onRenameFolder(folder)}
+                  aria-label={`Rename ${folder.name}`}
+                >
+                  <EditOutlinedIcon sx={{ fontSize: 15 }} />
+                </RenameFolderButton>
+              </Tooltip>
+              <Tooltip title="Delete folder">
+                <DeleteFolderButton
+                  className="folder-action"
+                  onClick={() => onDeleteFolder(folder)}
+                  aria-label={`Delete ${folder.name}`}
+                >
+                  <DeleteIcon sx={{ fontSize: 15 }} />
+                </DeleteFolderButton>
+              </Tooltip>
             </FolderCard>
           ))}
           {visibleBooks.map((book) => (

@@ -1,11 +1,16 @@
 import styled from "@emotion/styled";
+import ArrowBackIcon from "@mui/icons-material/ArrowBack";
+import DarkModeIcon from "@mui/icons-material/DarkMode";
+import LightModeIcon from "@mui/icons-material/LightMode";
+import ZoomInIcon from "@mui/icons-material/ZoomIn";
+import ZoomOutIcon from "@mui/icons-material/ZoomOut";
+import MuiButton from "@mui/material/Button";
+import IconButton from "@mui/material/IconButton";
+import ToggleButton from "@mui/material/ToggleButton";
+import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
+import Tooltip from "@mui/material/Tooltip";
 import type { ReadingMode, Theme } from "../../types";
 
-// The toolbar intentionally uses bespoke, borderless controls (transparent
-// background, larger glyphs) rather than the shared `ui/Button`/`IconButton`
-// primitives, which are bordered, fixed-height surface buttons meant for
-// library/dialog actions. Keeping these local avoids overloading the shared
-// Button with a divergent "toolbar" variant.
 const Toolbar = styled.div`
   width: 100%;
   display: flex;
@@ -33,58 +38,15 @@ const NavControls = styled.div`
   justify-content: flex-end;
 `;
 
-const Button = styled.button`
-  border: none;
-  background-color: var(--bg);
-  color: var(--text);
-  cursor: pointer;
-  font-size: 20px;
-
-  &:hover {
-    background-color: var(--accent-bg);
-  }
-
-  &:disabled {
-    cursor: not-allowed;
-    opacity: 0.5;
-  }
-
-  &:disabled:hover {
-    background-color: var(--bg);
-  }
-`;
-
-const IconBtn = styled(Button)`
-  width: 2.25rem;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-`;
-
 const Zoom = styled.span`
   font-size: 16px;
   color: var(--text);
 `;
 
-const ModeSelect = styled.select`
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  background-color: var(--bg);
-  color: var(--text);
-  cursor: pointer;
-  font-size: 14px;
-  padding: 0.25rem 0.5rem;
-
-  &:disabled {
-    cursor: not-allowed;
-    opacity: 0.5;
-  }
-`;
-
 interface ReaderToolbarProps {
   bookTitle: string;
   mode: ReadingMode;
-  onModeChange: (e: React.ChangeEvent<HTMLSelectElement>) => void;
+  onModeChange: (mode: ReadingMode) => void;
   zoom: number;
   onZoomIn: () => void;
   onZoomOut: () => void;
@@ -108,37 +70,85 @@ function ReaderToolbar({
 }: ReaderToolbarProps) {
   return (
     <Toolbar>
-      <Button onClick={onBackToLibrary}>← Library</Button>
+      <MuiButton
+        startIcon={<ArrowBackIcon />}
+        onClick={onBackToLibrary}
+        sx={{ color: "var(--text)", textTransform: "none" }}
+      >
+        Library
+      </MuiButton>
       <BookTitle title={bookTitle}>{bookTitle}</BookTitle>
       <NavControls>
-        <ModeSelect
+        <ToggleButtonGroup
+          exclusive
+          size="small"
           aria-label="Reading mode"
           value={mode}
-          onChange={onModeChange}
+          onChange={(_event, value: ReadingMode | null) => {
+            if (value) onModeChange(value);
+          }}
           disabled={controlsDisabled}
+          sx={{
+            "& .MuiToggleButton-root": {
+              borderColor: "var(--border)",
+              color: "var(--text)",
+              textTransform: "none",
+              "&.Mui-selected": {
+                bgcolor: "var(--accent-bg)",
+                color: "var(--accent)",
+              },
+            },
+          }}
         >
-          <option value="scrolled">Scrolled</option>
-          <option value="paginated">Paginated</option>
-        </ModeSelect>
-        <IconBtn onClick={onZoomOut} disabled={controlsDisabled}>
-          -
-        </IconBtn>
+          <ToggleButton value="scrolled">Scrolled</ToggleButton>
+          <ToggleButton value="paginated">Paginated</ToggleButton>
+        </ToggleButtonGroup>
+        <Tooltip title="Zoom out">
+          <span>
+            <IconButton
+              aria-label="Zoom out"
+              onClick={onZoomOut}
+              disabled={controlsDisabled}
+              sx={iconButtonStyles}
+            >
+              <ZoomOutIcon />
+            </IconButton>
+          </span>
+        </Tooltip>
         <Zoom>{zoom}%</Zoom>
-        <IconBtn onClick={onZoomIn} disabled={controlsDisabled}>
-          +
-        </IconBtn>
-        <IconBtn
-          aria-label="Toggle theme"
+        <Tooltip title="Zoom in">
+          <span>
+            <IconButton
+              aria-label="Zoom in"
+              onClick={onZoomIn}
+              disabled={controlsDisabled}
+              sx={iconButtonStyles}
+            >
+              <ZoomInIcon />
+            </IconButton>
+          </span>
+        </Tooltip>
+        <Tooltip
           title={
             theme === "light" ? "Switch to dark mode" : "Switch to light mode"
           }
-          onClick={onToggleTheme}
         >
-          {theme === "light" ? "☾" : "☀"}
-        </IconBtn>
+          <IconButton
+            aria-label="Toggle theme"
+            onClick={onToggleTheme}
+            sx={iconButtonStyles}
+          >
+            {theme === "light" ? <DarkModeIcon /> : <LightModeIcon />}
+          </IconButton>
+        </Tooltip>
       </NavControls>
     </Toolbar>
   );
 }
+
+const iconButtonStyles = {
+  color: "var(--text)",
+  "&:hover": { bgcolor: "var(--accent-bg)", color: "var(--accent)" },
+};
 
 export default ReaderToolbar;

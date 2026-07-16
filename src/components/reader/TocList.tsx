@@ -1,7 +1,8 @@
 import styled from "@emotion/styled";
+import ButtonBase from "@mui/material/ButtonBase";
 import type { TocItem } from "../../types";
 
-const TocButton = styled.button<{ depth: number }>`
+const TocButton = styled(ButtonBase)<{ depth: number }>`
   display: block;
   width: 100%;
   text-align: left;

@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import styled from "@emotion/styled";
+import Paper from "@mui/material/Paper";
 import { Button } from "../components";
 import { useAuth } from "./authContext";
 
@@ -14,7 +15,7 @@ const Shell = styled.div`
     var(--bg);
 `;
 
-const Panel = styled.div`
+const Panel = styled(Paper)`
   width: min(100%, 30rem);
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -67,7 +68,7 @@ function AuthGate({ children }: AuthGateProps) {
 
   return (
     <Shell>
-      <Panel>
+      <Panel elevation={3}>
         <Title>EPUB Reader</Title>
         <Text>Sign in with Google to access your Google Drive library.</Text>
         <GoogleButtonHost ref={googleButtonRef} />

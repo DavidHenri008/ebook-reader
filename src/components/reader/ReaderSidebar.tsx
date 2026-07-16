@@ -1,8 +1,9 @@
 import styled from "@emotion/styled";
+import Paper from "@mui/material/Paper";
 import type { TocItem } from "../../types";
 import TocList from "./TocList";
 
-const Sidebar = styled.div`
+const Sidebar = styled(Paper)`
   border-right: 1px solid var(--border);
   background-color: var(--bg);
   padding: 0.75rem 0;
@@ -63,7 +64,7 @@ interface ReaderSidebarProps {
 
 function ReaderSidebar({ toc, onNavigate, page, total }: ReaderSidebarProps) {
   return (
-    <Sidebar>
+    <Sidebar elevation={0} square>
       <SidebarTitle>Contents</SidebarTitle>
       <TocContent>
         {toc.length > 0 ? (

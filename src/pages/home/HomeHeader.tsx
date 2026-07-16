@@ -1,4 +1,5 @@
 import styled from "@emotion/styled";
+import MuiAvatar from "@mui/material/Avatar";
 import { Button } from "../../components";
 import type { DriveLibraryInfo } from "../../types";
 
@@ -43,7 +44,7 @@ const Account = styled.div`
   min-width: 0;
 `;
 
-const Avatar = styled.img`
+const Avatar = styled(MuiAvatar)`
   width: 2.5rem;
   height: 2.5rem;
   border-radius: 50%;
@@ -87,7 +88,7 @@ function HomeHeader({ libraryInfo, user, onSignOut }: HomeHeaderProps) {
       <HeaderActions>
         {user && (
           <Account>
-            {user.picture && <Avatar src={user.picture} alt="" />}
+            {user.picture && <Avatar src={user.picture} alt={user.name} />}
             <AccountText>
               <AccountName>{user.name}</AccountName>
               <div>{user.email}</div>

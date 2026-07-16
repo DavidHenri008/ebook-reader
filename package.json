@@ -14,6 +14,8 @@
   "dependencies": {
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.1",
+    "@mui/icons-material": "^9.2.0",
+    "@mui/material": "^9.2.0",
     "@tanstack/react-router": "^1.170.11",
     "epubjs": "^0.3.93",
     "idb": "^8.0.3",

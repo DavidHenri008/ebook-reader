@@ -1,4 +1,8 @@
 import styled from "@emotion/styled";
+import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
+import ChevronRightIcon from "@mui/icons-material/ChevronRight";
+import IconButton from "@mui/material/IconButton";
+import Tooltip from "@mui/material/Tooltip";
 import { useSectionViewer } from "./useSectionViewer";
 import type { SectionViewerProps } from "./useSectionViewer";
 
@@ -25,7 +29,7 @@ const Wrapper = styled.div<{ $mode: "paginated" | "scrolled" }>`
     p.$mode === "paginated" ? "safe center" : "stretch"};
 `;
 
-const NavButton = styled.button`
+const NavButton = styled(IconButton)`
   position: absolute;
   top: 50%;
   transform: translateY(-50%);
@@ -37,7 +41,6 @@ const NavButton = styled.button`
   width: 40px;
   height: 40px;
   cursor: pointer;
-  font-size: 38px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -81,24 +84,28 @@ function SectionViewer(props: SectionViewerProps) {
       </Wrapper>
 
       {mode === "paginated" && (
-        <NavButton
-          aria-label="Previous page"
-          disabled={isFirstSection && atFirstPage}
-          onClick={navigatePrev}
-          style={{ left: 16 }}
-        >
-          &#8249;
-        </NavButton>
+        <Tooltip title="Previous page" placement="right">
+          <NavButton
+            aria-label="Previous page"
+            disabled={isFirstSection && atFirstPage}
+            onClick={navigatePrev}
+            style={{ left: 16 }}
+          >
+            <ChevronLeftIcon fontSize="large" />
+          </NavButton>
+        </Tooltip>
       )}
       {mode === "paginated" && (
-        <NavButton
-          aria-label="Next page"
-          disabled={isLastSection && atLastPage}
-          onClick={navigateNext}
-          style={{ right: 16 }}
-        >
-          &#8250;
-        </NavButton>
+        <Tooltip title="Next page" placement="left">
+          <NavButton
+            aria-label="Next page"
+            disabled={isLastSection && atLastPage}
+            onClick={navigateNext}
+            style={{ right: 16 }}
+          >
+            <ChevronRightIcon fontSize="large" />
+          </NavButton>
+        </Tooltip>
       )}
     </OuterContainer>
   );

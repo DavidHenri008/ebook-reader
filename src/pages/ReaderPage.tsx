@@ -300,8 +300,7 @@ function ReaderPage() {
   );
 
   const handleModeChange = useCallback(
-    (e: React.ChangeEvent<HTMLSelectElement>) => {
-      const newMode = e.target.value as ReadingMode;
+    (newMode: ReadingMode) => {
       setMode(newMode);
       saveMode(newMode);
     },

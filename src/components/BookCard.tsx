@@ -1,5 +1,11 @@
 import styled from "@emotion/styled";
-import { keyframes } from "@emotion/react";
+import ClearAllIcon from "@mui/icons-material/ClearAll";
+import DriveFileMoveIcon from "@mui/icons-material/DriveFileMove";
+import RemoveCircleIcon from "@mui/icons-material/RemoveCircleOutlined";
+import ButtonBase from "@mui/material/ButtonBase";
+import CircularProgress from "@mui/material/CircularProgress";
+import IconButton from "@mui/material/IconButton";
+import Tooltip from "@mui/material/Tooltip";
 import type { BookMeta } from "../types";
 
 //#region Styled Components
@@ -13,7 +19,7 @@ const Card = styled.div`
   }
 `;
 
-const OpenButton = styled.button`
+const OpenButton = styled(ButtonBase)`
   display: flex;
   flex-direction: column;
   width: 100%;
@@ -100,7 +106,7 @@ const ActionOverlay = styled.div`
   pointer-events: none;
 `;
 
-const ActionButton = styled.button`
+const ActionButton = styled(IconButton)`
   position: absolute;
   right: 4px;
   width: 24px;
@@ -109,7 +115,6 @@ const ActionButton = styled.button`
   border-radius: 50%;
   background-color: var(--overlay-strong);
   color: white;
-  font-size: 14px;
   cursor: pointer;
   opacity: 0;
   pointer-events: auto;
@@ -149,12 +154,6 @@ const MoveButton = styled(ActionButton)`
   }
 `;
 
-const spin = keyframes`
-  to {
-    transform: rotate(360deg);
-  }
-`;
-
 const ExtractingOverlay = styled.div`
   position: absolute;
   inset: 0;
@@ -168,14 +167,6 @@ const ExtractingOverlay = styled.div`
   font-size: 0.75rem;
 `;
 
-const Spinner = styled.div`
-  width: 28px;
-  height: 28px;
-  border: 3px solid rgba(255, 255, 255, 0.3);
-  border-top-color: white;
-  border-radius: 50%;
-  animation: ${spin} 0.8s linear infinite;
-`;
 //#endregion
 
 interface BookCardProps {
@@ -236,7 +227,13 @@ function BookCard({
           )}
           {(isExtracting || status) && (
             <ExtractingOverlay>
-              {isExtracting && <Spinner aria-hidden="true" />}
+              {isExtracting && (
+                <CircularProgress
+                  size={28}
+                  color="inherit"
+                  aria-hidden="true"
+                />
+              )}
               <span>{status ?? "Extracting..."}</span>
             </ExtractingOverlay>
           )}
@@ -245,35 +242,35 @@ function BookCard({
         {book.author && <Author title={book.author}>{book.author}</Author>}
       </OpenButton>
       <ActionOverlay>
-        <RemoveButton
-          type="button"
-          className="action-btn"
-          onClick={handleRemove}
-          aria-label={`Remove ${book.title} from library and keep the Google Drive file`}
-          title="Remove from library; keeps the file in Google Drive"
-        >
-          X
-        </RemoveButton>
-        {onMove && (
-          <MoveButton
-            type="button"
+        <Tooltip title="Remove from library; keeps the file in Google Drive">
+          <RemoveButton
             className="action-btn"
-            onClick={() => onMove(book)}
-            aria-label={`Move ${book.title} to another folder`}
-            title="Move to folder"
+            onClick={handleRemove}
+            aria-label={`Remove ${book.title} from library and keep the Google Drive file`}
           >
-            ↪
-          </MoveButton>
+            <RemoveCircleIcon sx={{ fontSize: 16 }} />
+          </RemoveButton>
+        </Tooltip>
+        {onMove && (
+          <Tooltip title="Move to folder">
+            <MoveButton
+              className="action-btn"
+              onClick={() => onMove(book)}
+              aria-label={`Move ${book.title} to another folder`}
+            >
+              <DriveFileMoveIcon sx={{ fontSize: 16 }} />
+            </MoveButton>
+          </Tooltip>
         )}
-        <ClearCacheButton
-          type="button"
-          className="action-btn"
-          onClick={handleClearCache}
-          aria-label={`Clear extraction cache for ${book.title}`}
-          title="Clear extraction cache"
-        >
-          ↺
-        </ClearCacheButton>
+        <Tooltip title="Clear extraction cache">
+          <ClearCacheButton
+            className="action-btn"
+            onClick={handleClearCache}
+            aria-label={`Clear extraction cache for ${book.title}`}
+          >
+            <ClearAllIcon sx={{ fontSize: 16 }} />
+          </ClearCacheButton>
+        </Tooltip>
       </ActionOverlay>
     </Card>
   );

@@ -1,26 +1,12 @@
 import { useRef, type ChangeEvent } from "react";
 import styled from "@emotion/styled";
-import { keyframes } from "@emotion/react";
+import UploadFileIcon from "@mui/icons-material/UploadFile";
+import CircularProgress from "@mui/material/CircularProgress";
 import { Button } from "./ui";
 
 //#region Styled Components
-const spin = keyframes`
-  to { transform: rotate(360deg); }
-`;
-
 const HiddenInput = styled.input`
   display: none;
-`;
-
-const Spinner = styled.span`
-  display: inline-block;
-  width: 0.9em;
-  height: 0.9em;
-  border: 2px solid currentColor;
-  border-top-color: transparent;
-  border-radius: 50%;
-  animation: ${spin} 0.7s linear infinite;
-  flex-shrink: 0;
 `;
 //#endregion
 
@@ -67,8 +53,14 @@ function FilePicker({
         $variant="filled"
         onClick={handleClick}
         disabled={disabled}
+        startIcon={
+          disabled ? (
+            <CircularProgress size="1em" color="inherit" />
+          ) : (
+            <UploadFileIcon />
+          )
+        }
       >
-        {disabled && <Spinner aria-hidden="true" />}
         {label}
       </Button>
     </>

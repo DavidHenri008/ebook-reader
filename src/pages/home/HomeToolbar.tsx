@@ -1,5 +1,17 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useState } from "react";
 import styled from "@emotion/styled";
+import AddIcon from "@mui/icons-material/Add";
+import CreateNewFolderIcon from "@mui/icons-material/CreateNewFolder";
+import DarkModeIcon from "@mui/icons-material/DarkMode";
+import DeleteSweepIcon from "@mui/icons-material/DeleteSweep";
+import DriveFolderUploadIcon from "@mui/icons-material/DriveFolderUpload";
+import LightModeIcon from "@mui/icons-material/LightMode";
+import RefreshIcon from "@mui/icons-material/Refresh";
+import SettingsIcon from "@mui/icons-material/Settings";
+import ListItemIcon from "@mui/material/ListItemIcon";
+import Menu from "@mui/material/Menu";
+import MenuItem from "@mui/material/MenuItem";
+import Tooltip from "@mui/material/Tooltip";
 import { Button, FilePicker, IconButton } from "../../components";
 
 const Toolbar = styled.div`
@@ -18,78 +30,6 @@ const LibraryActions = styled.div`
   flex-wrap: wrap;
   gap: 0.75rem;
   width: 100%;
-`;
-
-const SettingsMenu = styled.details`
-  position: relative;
-  margin-left: auto;
-`;
-
-const SettingsSummary = styled.summary`
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 2.5rem;
-  height: 2.5rem;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  background-color: var(--bg);
-  color: var(--text);
-  cursor: pointer;
-  font-size: 1.25rem;
-  list-style: none;
-
-  &::-webkit-details-marker {
-    display: none;
-  }
-
-  &:hover {
-    border-color: var(--accent-border);
-    color: var(--accent);
-  }
-
-  &:focus-visible {
-    outline: 2px solid var(--accent);
-    outline-offset: 2px;
-  }
-`;
-
-const SettingsPanel = styled.div`
-  position: absolute;
-  z-index: 10;
-  top: calc(100% + 0.5rem);
-  right: 0;
-  display: grid;
-  min-width: 14rem;
-  padding: 0.35rem;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  background: var(--bg);
-  box-shadow: 0 0.5rem 1.5rem rgb(0 0 0 / 18%);
-`;
-
-const SettingsItem = styled.button`
-  width: 100%;
-  padding: 0.65rem 0.75rem;
-  border: 0;
-  border-radius: 3px;
-  background: transparent;
-  color: var(--text);
-  cursor: pointer;
-  font: inherit;
-  text-align: left;
-
-  &:hover:not(:disabled),
-  &:focus-visible {
-    background: var(--accent-bg);
-    color: var(--accent);
-    outline: none;
-  }
-
-  &:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-  }
 `;
 
 interface HomeToolbarProps {
@@ -119,22 +59,11 @@ function HomeToolbar({
   onClearCachedBooks,
   onToggleTheme,
 }: HomeToolbarProps) {
-  const settingsMenuRef = useRef<HTMLDetailsElement>(null);
+  const [settingsAnchor, setSettingsAnchor] = useState<HTMLElement | null>(
+    null,
+  );
 
-  const closeSettingsMenu = useCallback(() => {
-    if (settingsMenuRef.current) settingsMenuRef.current.open = false;
-  }, []);
-
-  useEffect(() => {
-    const handlePointerDown = (event: PointerEvent) => {
-      const menu = settingsMenuRef.current;
-      if (menu?.open && !menu.contains(event.target as Node)) {
-        menu.open = false;
-      }
-    };
-    document.addEventListener("pointerdown", handlePointerDown);
-    return () => document.removeEventListener("pointerdown", handlePointerDown);
-  }, []);
+  const closeSettingsMenu = () => setSettingsAnchor(null);
 
   return (
     <Toolbar>
@@ -142,6 +71,7 @@ function HomeToolbar({
         <Button
           type="button"
           $variant="filled"
+          startIcon={<AddIcon />}
           onClick={onAddFromDrive}
           disabled={isAdding}
         >
@@ -152,62 +82,97 @@ function HomeToolbar({
           label="Upload"
           disabled={isAdding}
         />
-        <Button type="button" onClick={onCreateFolder}>
+        <Button
+          type="button"
+          startIcon={<CreateNewFolderIcon />}
+          onClick={onCreateFolder}
+        >
           Create folder
         </Button>
-        <IconButton
-          type="button"
-          aria-label={isRefreshing ? "Refreshing library" : "Refresh library"}
+        <Tooltip
           title={isRefreshing ? "Refreshing library" : "Refresh library"}
-          onClick={onRefresh}
-          disabled={isRefreshing}
         >
-          ↻
-        </IconButton>
-        <SettingsMenu ref={settingsMenuRef}>
-          <SettingsSummary
-            aria-label="Library settings"
-            title="Library settings"
-          >
-            ⚙
-          </SettingsSummary>
-          <SettingsPanel role="menu">
-            <SettingsItem
+          <span>
+            <IconButton
               type="button"
-              role="menuitem"
-              onClick={() => {
-                closeSettingsMenu();
-                onChangeFolder();
-              }}
+              aria-label={
+                isRefreshing ? "Refreshing library" : "Refresh library"
+              }
+              onClick={onRefresh}
               disabled={isRefreshing}
             >
-              Change Google Drive folder
-            </SettingsItem>
-            <SettingsItem
-              type="button"
-              role="menuitem"
-              onClick={() => {
-                closeSettingsMenu();
-                onClearCachedBooks();
-              }}
-              disabled={isClearingCache}
-            >
-              {isClearingCache ? "Clearing..." : "Clear cached books"}
-            </SettingsItem>
-            <SettingsItem
-              type="button"
-              role="menuitem"
-              onClick={() => {
-                closeSettingsMenu();
-                onToggleTheme();
-              }}
-            >
-              {theme === "light"
-                ? "Switch to dark theme"
-                : "Switch to light theme"}
-            </SettingsItem>
-          </SettingsPanel>
-        </SettingsMenu>
+              <RefreshIcon />
+            </IconButton>
+          </span>
+        </Tooltip>
+        <Tooltip title="Library settings">
+          <IconButton
+            aria-label="Library settings"
+            aria-controls={settingsAnchor ? "library-settings-menu" : undefined}
+            aria-haspopup="true"
+            aria-expanded={settingsAnchor ? "true" : undefined}
+            onClick={(event) => setSettingsAnchor(event.currentTarget)}
+          >
+            <SettingsIcon />
+          </IconButton>
+        </Tooltip>
+        <Menu
+          id="library-settings-menu"
+          anchorEl={settingsAnchor}
+          open={Boolean(settingsAnchor)}
+          onClose={closeSettingsMenu}
+          anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+          transformOrigin={{ vertical: "top", horizontal: "right" }}
+          slotProps={{
+            paper: {
+              sx: {
+                mt: 1,
+                minWidth: "14rem",
+                border: "1px solid var(--border)",
+                bgcolor: "var(--bg)",
+                color: "var(--text)",
+              },
+            },
+          }}
+        >
+          <MenuItem
+            onClick={() => {
+              closeSettingsMenu();
+              onChangeFolder();
+            }}
+            disabled={isRefreshing}
+          >
+            <ListItemIcon>
+              <DriveFolderUploadIcon />
+            </ListItemIcon>
+            Change Google Drive folder
+          </MenuItem>
+          <MenuItem
+            onClick={() => {
+              closeSettingsMenu();
+              onClearCachedBooks();
+            }}
+            disabled={isClearingCache}
+          >
+            <ListItemIcon>
+              <DeleteSweepIcon />
+            </ListItemIcon>
+            {isClearingCache ? "Clearing..." : "Clear cached books"}
+          </MenuItem>
+          <MenuItem
+            onClick={() => {
+              closeSettingsMenu();
+              onToggleTheme();
+            }}
+          >
+            <ListItemIcon>
+              {theme === "light" ? <DarkModeIcon /> : <LightModeIcon />}
+            </ListItemIcon>
+            {theme === "light"
+              ? "Switch to dark theme"
+              : "Switch to light theme"}
+          </MenuItem>
+        </Menu>
       </LibraryActions>
     </Toolbar>
   );
