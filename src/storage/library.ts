@@ -104,16 +104,6 @@ export async function refreshLibrary(): Promise<LibrarySnapshot> {
   return toSnapshot(pruned);
 }
 
-export async function getAllBooks(): Promise<BookMeta[]> {
-  const snapshot = await getLibrarySnapshot();
-  return sortBooks(snapshot.books);
-}
-
-export async function getLibraryFolders(): Promise<VirtualFolder[]> {
-  const snapshot = await getLibrarySnapshot();
-  return snapshot.virtualFolders;
-}
-
 export async function getBookMeta(id: string): Promise<BookMeta | undefined> {
   const manifest = await ensureDriveLibrary({ promptIfMissing: false });
   return manifest.books.find((book) => book.id === id);

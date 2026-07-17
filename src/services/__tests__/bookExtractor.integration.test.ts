@@ -42,9 +42,8 @@ function cssUrls(css: string): string[] {
 
 /**
  * Independently enumerate the local asset references a real DOM parse would
- * surface from a section's HTML. This mirrors the DOMParser-based rewrite that
- * PLAN2 step C1 proposes, so it acts as an oracle: the hand-rolled scanner must
- * not miss any reference this DOM walk finds.
+ * surface from a section's HTML. This acts as an oracle: the production scanner
+ * must not miss any reference this DOM walk finds.
  */
 function domReferences(html: string): Set<string> {
   const doc = new DOMParser().parseFromString(html, "text/html");
@@ -95,9 +94,9 @@ interface SectionDoc {
 
 /**
  * Real-EPUB coverage for the asset-reference scanner. This is the integration
- * safety net for PLAN2 step C1: the DOMParser rewrite of asset collection must
- * keep finding every local reference (no false negatives) and must not invent
- * references that do not resolve to a real archive entry (no false positives).
+ * safety net: asset collection must keep finding every local reference (no
+ * false negatives) and must not invent references that do not resolve to a
+ * real archive entry (no false positives).
  *
  * It intentionally avoids the full epubjs extraction (rendering + base64
  * inlining of every image), which is far too slow for a large fixed-layout

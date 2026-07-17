@@ -4,8 +4,7 @@ import { VitePWA } from "vite-plugin-pwa";
 
 // https://vite.dev/config/
 export default defineConfig({
-  // Relative base so assets resolve under the native Capacitor scheme as well as
-  // the web origin. The web PWA (served from "/") works with relative URLs too.
+  // Keep assets relative so the web app can be hosted below the origin root.
   base: "./",
   plugins: [
     react({
@@ -22,8 +21,7 @@ export default defineConfig({
     }),
     VitePWA({
       registerType: "autoUpdate",
-      // Registration is performed manually in src/main.tsx so it can be gated to
-      // non-native platforms (the service worker is redundant inside Capacitor).
+      // Registration is performed explicitly in src/main.tsx.
       injectRegister: false,
       includeAssets: ["favicon.svg", "icons/*.svg"],
       manifest: {

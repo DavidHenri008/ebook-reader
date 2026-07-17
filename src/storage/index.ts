@@ -1,5 +1,4 @@
-// Persistence Layer
-// Local storage utilities for bookmarks, reading progress, and library management
+// Drive-backed library and reading state, plus the derived local book cache.
 
 export * from "./library";
 export * from "./readingState";

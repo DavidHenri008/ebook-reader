@@ -36,11 +36,7 @@ const readerRoute = createRoute({
 
 const routeTree = rootRoute.addChildren([homeRoute, readerRoute]);
 
-/**
- * Hash history is used everywhere (web and native). A native WebView serves the
- * app from a non-`/` origin where browser history routing breaks; hash routing
- * keeps URLs identical across both targets.
- */
+/** Hash history allows static hosting without server-side SPA rewrites. */
 export const router = createRouter({
   routeTree,
   history: createHashHistory(),
@@ -54,8 +50,8 @@ declare module "@tanstack/react-router" {
 
 /**
  * Navigation state carried between the library and the reader. It is held in
- * memory during the session and (like React Router's location state) is not
- * restored after a full page reload; the route book id is the durable source.
+ * memory during the session and is not restored after a full page reload; the
+ * route book id is the durable source.
  */
 declare module "@tanstack/history" {
   interface HistoryState {

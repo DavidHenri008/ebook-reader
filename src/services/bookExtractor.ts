@@ -151,7 +151,7 @@ function collectStyleUrls(references: Set<string>, css: string): void {
  * project guidelines recommend and that `SectionViewer` already relies on) to
  * read asset-bearing attributes, `srcset` candidates, inline `style`
  * declarations, and `<style>` element text. The unit and integration tests pin
- * the exact reference set this must produce (PLAN2 step C1).
+ * the exact reference set this must produce.
  */
 export function collectAssetReferences(html: string): Set<string> {
   const references = new Set<string>();

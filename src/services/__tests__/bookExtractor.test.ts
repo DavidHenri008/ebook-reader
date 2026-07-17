@@ -3,9 +3,8 @@ import { collectAssetReferences } from "../bookExtractor";
 
 /**
  * These tests pin the exact set of local asset references the extractor
- * collects from section HTML. They are the safety net for PLAN2 step C1
- * (replacing the hand-rolled attribute scanner with a DOMParser pass): any
- * rewrite must keep producing the same reference sets.
+ * collects from section HTML. Any rewrite must keep producing the same
+ * reference sets.
  */
 describe("collectAssetReferences", () => {
   it("collects src/href/poster/data attribute references with ./ variants", () => {
