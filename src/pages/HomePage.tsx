@@ -117,6 +117,13 @@ function HomePage() {
   const [theme, setTheme] = useAppTheme();
   const { confirm, alert, prompt, select, dialog } = useDialogs();
 
+  const showAddedBook = useCallback((book: BookMeta) => {
+    setBooks((current) => [
+      ...current.filter((candidate) => candidate.id !== book.id),
+      book,
+    ]);
+  }, []);
+
   const applySnapshot = useCallback((snapshot: LibrarySnapshot) => {
     setBooks(snapshot.books);
     setFolders(snapshot.virtualFolders);
@@ -236,13 +243,14 @@ function HomePage() {
       setErrorMessage(null);
       try {
         for (const file of files) {
-          await addBookToLibrary(
+          const book = await addBookToLibrary(
             file,
             (message, loaded, total) => {
               setProgressMessage(formatProgress(message, loaded, total));
             },
             activeFolder,
           );
+          showAddedBook(book);
         }
         applySnapshot(await getLibrarySnapshot());
       } catch (error) {
@@ -252,16 +260,20 @@ function HomePage() {
         setIsAdding(false);
       }
     },
-    [activeFolder, applySnapshot],
+    [activeFolder, applySnapshot, showAddedBook],
   );
 
   const handleAddFromDrive = useCallback(async () => {
     setIsAdding(true);
     setErrorMessage(null);
     try {
-      await addBooksFromDrivePicker((message, loaded, total) => {
-        setProgressMessage(formatProgress(message, loaded, total));
-      }, activeFolder);
+      await addBooksFromDrivePicker(
+        (message, loaded, total) => {
+          setProgressMessage(formatProgress(message, loaded, total));
+        },
+        activeFolder,
+        showAddedBook,
+      );
       applySnapshot(await getLibrarySnapshot());
     } catch (error) {
       setErrorMessage(getStorageErrorMessage(error));
@@ -269,7 +281,7 @@ function HomePage() {
       setProgressMessage(null);
       setIsAdding(false);
     }
-  }, [activeFolder, applySnapshot]);
+  }, [activeFolder, applySnapshot, showAddedBook]);
 
   const handleBookClick = useCallback(
     (book: BookMeta) => {

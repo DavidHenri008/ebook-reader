@@ -5,6 +5,7 @@ import type {
   LibrarySnapshot,
   VirtualFolder,
 } from "../types";
+import { extractRawBook } from "../services/bookExtractor";
 import { extractEpubMetadata } from "../services/epubMetadata";
 import {
   DriveApiError,
@@ -24,7 +25,11 @@ import {
   type PickedDriveItem,
 } from "../services/drive";
 import { sha256Hex } from "../utils/crypto";
-import { deleteRawBook } from "./bookCache";
+import {
+  deleteRawBook,
+  hasRawBook,
+  saveRawBook,
+} from "./bookCache";
 import { deleteReadingState } from "./readingState";
 
 type BookProgress = (message: string, loaded?: number, total?: number) => void;
@@ -41,6 +46,34 @@ export interface CacheValidationResult {
   book: BookMeta;
   fingerprintMatches: boolean;
   currentFingerprint: DriveFileFingerprint;
+}
+
+async function prewarmBookCache(
+  fileData: ArrayBuffer,
+  bookId: string,
+  title: string,
+  onProgress?: BookProgress,
+): Promise<void> {
+  try {
+    if (await hasRawBook(bookId)) return;
+
+    const extracted = await extractRawBook(
+      fileData,
+      bookId,
+      (done, total, message) => {
+        onProgress?.(
+          message ??
+            (total > 0
+              ? `Preparing ${title}... ${done} / ${total} sections`
+              : `Preparing ${title}...`),
+        );
+      },
+    );
+    onProgress?.(`Saving ${title} for faster opening...`);
+    await saveRawBook(extracted);
+  } catch (error) {
+    console.warn(`Failed to prepare cache for ${title}:`, error);
+  }
 }
 
 export async function hydrateBookCover(bookId: string): Promise<BookMeta> {
@@ -104,8 +137,10 @@ export async function addBookToLibrary(
     if (existing.virtualFolderId !== virtualFolderId) {
       const moved = { ...existing, virtualFolderId };
       await upsertBook(moved);
+      await prewarmBookCache(fileData, id, moved.title, onProgress);
       return moved;
     }
+    await prewarmBookCache(fileData, id, existing.title, onProgress);
     return existing;
   }
 
@@ -136,26 +171,36 @@ export async function addBookToLibrary(
   };
 
   await upsertBook(book);
+  await prewarmBookCache(fileData, id, book.title, onProgress);
   return book;
 }
 
 export async function addBooksFromDrivePicker(
   onProgress?: BookProgress,
   virtualFolderId?: string,
+  onBookAdded?: (book: BookMeta) => void,
 ): Promise<BookMeta[]> {
   await ensureDriveLibrary({ promptIfMissing: true });
   const items = await pickEpubFiles();
-  return addPickedDriveBooks(items, onProgress, virtualFolderId);
+  return addPickedDriveBooks(
+    items,
+    onProgress,
+    virtualFolderId,
+    onBookAdded,
+  );
 }
 
 export async function addPickedDriveBooks(
   items: PickedDriveItem[],
   onProgress?: BookProgress,
   virtualFolderId?: string,
+  onBookAdded?: (book: BookMeta) => void,
 ): Promise<BookMeta[]> {
   const results: BookMeta[] = [];
   for (const item of items) {
-    results.push(await addPickedDriveBook(item, onProgress, virtualFolderId));
+    const book = await addPickedDriveBook(item, onProgress, virtualFolderId);
+    results.push(book);
+    onBookAdded?.(book);
   }
   return results;
 }
@@ -182,8 +227,10 @@ export async function addPickedDriveBook(
     if (existing.virtualFolderId !== virtualFolderId) {
       const moved = { ...existing, virtualFolderId };
       await upsertBook(moved);
+      await prewarmBookCache(fileData, id, moved.title, onProgress);
       return moved;
     }
+    await prewarmBookCache(fileData, id, existing.title, onProgress);
     return existing;
   }
 
@@ -205,6 +252,7 @@ export async function addPickedDriveBook(
   };
 
   await upsertBook(book);
+  await prewarmBookCache(fileData, id, book.title, onProgress);
   return book;
 }
 

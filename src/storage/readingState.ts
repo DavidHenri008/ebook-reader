@@ -13,7 +13,7 @@ const SETTINGS_WRITE_DEBOUNCE_MS = 2000;
 const defaultReadingState: ReadingState = {
   lastLocation: undefined,
   zoom: 100,
-  mode: "paginated",
+  mode: "scrolled",
 };
 
 function isTheme(value: string | null): value is Theme {
