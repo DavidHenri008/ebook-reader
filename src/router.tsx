@@ -61,6 +61,7 @@ declare module "@tanstack/history" {
   interface HistoryState {
     bookId?: string;
     bookTitle?: string;
+    libraryFolderId?: string;
     theme?: Theme;
   }
 }

@@ -141,6 +141,20 @@ export async function measurePageMap(
   theme: Theme,
   signal?: AbortSignal,
 ): Promise<MeasuredPageMap> {
+  if (signal?.aborted) {
+    throw new DOMException("Page measurement aborted", "AbortError");
+  }
+
+  if (sections.every((section) => section.viewport)) {
+    return {
+      sectionPageStarts: sections.map(() => [0]),
+      pageCounts: sections.map(() => 1),
+      total: sections.length,
+      zoom,
+      viewport,
+    };
+  }
+
   const measurementViewport = createMeasurementViewport(viewport);
   const host = document.createElement("div");
   measurementViewport.appendChild(host);
@@ -157,6 +171,12 @@ export async function measurePageMap(
     for (const [index, section] of sections.entries()) {
       if (signal?.aborted) {
         throw new DOMException("Page measurement aborted", "AbortError");
+      }
+
+      if (section.viewport) {
+        sectionPageStarts[index] = [0];
+        pageCounts[index] = 1;
+        continue;
       }
 
       const dims = getColDims(section.viewport, measurementViewport, zoom);

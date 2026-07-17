@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import styled from "@emotion/styled";
-import { useNavigate } from "@tanstack/react-router";
+import { useLocation, useNavigate } from "@tanstack/react-router";
 import { Button } from "../components";
 import { useDialogs } from "../components/ui";
 import { useAuth } from "../auth";
@@ -97,8 +97,14 @@ function formatProgress(
     : `${message} ${loadedMb} MB`;
 }
 
+interface LocationState {
+  libraryFolderId?: string;
+}
+
 function HomePage() {
+  const location = useLocation();
   const navigate = useNavigate();
+  const locationState = location.state as LocationState | undefined;
   const { user, signOut } = useAuth();
   const [books, setBooks] = useState<BookMeta[]>([]);
   const [folders, setFolders] = useState<VirtualFolder[]>([]);
@@ -110,7 +116,9 @@ function HomePage() {
   const [isClearingCache, setIsClearingCache] = useState(false);
   const [progressMessage, setProgressMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [activeFolder, setActiveFolder] = useState<string | undefined>();
+  const [activeFolder, setActiveFolder] = useState<string | undefined>(
+    locationState?.libraryFolderId,
+  );
   const [searchQuery, setSearchQuery] = useState("");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
   const attemptedCoverIds = useRef(new Set<string>());
@@ -288,10 +296,15 @@ function HomePage() {
       navigate({
         to: "/reader/$bookId",
         params: { bookId: book.id },
-        state: { bookId: book.id, bookTitle: book.title, theme },
+        state: {
+          bookId: book.id,
+          bookTitle: book.title,
+          libraryFolderId: activeFolder,
+          theme,
+        },
       });
     },
-    [navigate, theme],
+    [activeFolder, navigate, theme],
   );
 
   const handleRemoveBook = useCallback(

@@ -25,11 +25,7 @@ import {
   type PickedDriveItem,
 } from "../services/drive";
 import { sha256Hex } from "../utils/crypto";
-import {
-  deleteRawBook,
-  hasRawBook,
-  saveRawBook,
-} from "./bookCache";
+import { deleteRawBook, hasRawBook, saveRawBook } from "./bookCache";
 import { deleteReadingState } from "./readingState";
 
 type BookProgress = (message: string, loaded?: number, total?: number) => void;
@@ -182,12 +178,7 @@ export async function addBooksFromDrivePicker(
 ): Promise<BookMeta[]> {
   await ensureDriveLibrary({ promptIfMissing: true });
   const items = await pickEpubFiles();
-  return addPickedDriveBooks(
-    items,
-    onProgress,
-    virtualFolderId,
-    onBookAdded,
-  );
+  return addPickedDriveBooks(items, onProgress, virtualFolderId, onBookAdded);
 }
 
 export async function addPickedDriveBooks(

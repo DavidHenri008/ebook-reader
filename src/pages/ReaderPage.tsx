@@ -60,6 +60,7 @@ const ProgressBody = styled.div`
 interface LocationState {
   bookId?: string;
   bookTitle?: string;
+  libraryFolderId?: string;
 }
 
 const ZOOM_STEP = 10;
@@ -299,8 +300,11 @@ function ReaderPage() {
   );
 
   const handleBackToLibrary = useCallback(() => {
-    navigate({ to: "/" });
-  }, [navigate]);
+    navigate({
+      to: "/",
+      state: { libraryFolderId: locationState?.libraryFolderId },
+    });
+  }, [locationState?.libraryFolderId, navigate]);
 
   const controlsDisabled = !effectiveBookId || !readingState || !extractedBook;
 
