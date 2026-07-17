@@ -32,6 +32,7 @@ interface PickerDocsView {
   setIncludeFolders: (value: boolean) => PickerDocsView;
   setSelectFolderEnabled: (value: boolean) => PickerDocsView;
   setMimeTypes: (value: string) => PickerDocsView;
+  setParent: (parentId: string) => PickerDocsView;
 }
 
 interface PickerBuilder {
@@ -70,9 +71,11 @@ export async function pickLibraryFolder(): Promise<PickedDriveItem | null> {
 
 export async function pickEpubFiles(): Promise<PickedDriveItem[]> {
   const picker = await loadPickerApi();
-  const view = new picker.DocsView(picker.ViewId.DOCS).setMimeTypes(
-    EPUB_MIME_TYPES,
-  );
+  const view = new picker.DocsView(picker.ViewId.DOCS)
+    .setParent("root")
+    .setIncludeFolders(true)
+    .setSelectFolderEnabled(false)
+    .setMimeTypes(EPUB_MIME_TYPES);
   return openPicker(picker, [view], true);
 }
 

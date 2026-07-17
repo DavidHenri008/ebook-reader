@@ -89,7 +89,7 @@ function formatProgress(
   loaded: number | undefined,
   total: number | undefined,
 ): string {
-  if (loaded === undefined || loaded <= 0) return message;
+  if (loaded === undefined || loaded < 0) return message;
   const loadedMb = Math.round(loaded / (1024 * 1024));
   const totalMb = Math.round((total ?? 0) / (1024 * 1024));
   return totalMb > 0
